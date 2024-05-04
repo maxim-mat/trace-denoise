@@ -20,8 +20,10 @@ if __name__ == "__main__":
     train_salads = SaladsDataset(train_dataset)
     test_salads = SaladsDataset(test_dataset)
 
-    train_loader = DataLoader(train_salads, batch_size=10, collate_fn=lambda batch: pad_sequence(batch, batch_first=True, padding_value=-1))
-    test_loader = DataLoader(test_salads, batch_size=10, collate_fn=lambda batch: pad_sequence(batch, batch_first=True, padding_value=-1))
+    train_loader = DataLoader(train_salads, batch_size=10,
+                              collate_fn=lambda batch: pad_sequence(batch, batch_first=True, padding_value=-1))
+    test_loader = DataLoader(test_salads, batch_size=10,
+                             collate_fn=lambda batch: pad_sequence(batch, batch_first=True, padding_value=-1))
 
     for epoch in range(num_epochs):
         for B in train_loader:

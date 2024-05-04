@@ -21,4 +21,4 @@ class SaladsDataset(Dataset):
         return len(self.__data)
 
     def __getitem__(self, idx):
-        return tensor([[ts, te, *act.toarray()[0]] for ts, te, act in self.__data[idx]])
+        return tensor(self.__data[idx])

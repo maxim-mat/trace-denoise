@@ -265,6 +265,12 @@ class UNet_conditional(nn.Module):
         return output
 
 
+class Sequence(nn.Module):
+    def __init__(self, c_in=3, c_out=3, input_dim=128, time_dim=256, num_classes=None, device="cuda"):
+        super().__init__()
+
+
+
 if __name__ == '__main__':
     # net = UNet(device="cuda:0", input_dim=256).to("cuda:0")
     net = UNet_conditional(num_classes=10, input_dim=256, device="cuda:0").to("cuda:0")

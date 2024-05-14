@@ -13,6 +13,9 @@ class Diffusion:
         self.alpha = 1. - self.beta
         self.alpha_hat = torch.cumprod(self.alpha, dim=0)
 
+    def sample_timesteps(self, n_timesteps):
+        return torch.randint(low=1, high=self.noise_steps, size=(n_timesteps,))
+
     def prepare_noise_schedule(self):
         return torch.linspace(self.beta_start, self.beta_end, self.noise_steps)
 

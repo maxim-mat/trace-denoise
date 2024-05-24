@@ -90,14 +90,14 @@ def evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch):
     total_loss = 0.0
     l = len(test_loader)
     with torch.no_grad():
-        for i, x in tqdm(enumerate(test_loader)):
-            x = x.to(cfg.device)
-            t = diffuser.sample_timesteps(cfg.batch_size).to(cfg.device)
+        for i, x in enumerate(test_loader):
+            x = x.to(cfg.device).float()
+            t = diffuser.sample_timesteps(x.shape[0]).to(cfg.device)
             x_t, eps = diffuser.noise_data(x, t)
             output = denoiser(x_t, t)
             loss = criterion(output, eps)
             total_loss += loss.item()
-            summary.add_scalar("MSE_train", loss.item(), global_step=epoch * l + i)
+            summary.add_scalar("MSE_test", loss.item(), global_step=epoch * l + i)
     average_loss = total_loss / l
     return average_loss
 
@@ -107,11 +107,12 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, c
     l = len(train_loader)
     test_epoch = 0
     for epoch in tqdm(range(cfg.num_epochs)):
+        denoiser.train()
         epoch_loss = 0.0
-        for i, x in tqdm(enumerate(train_loader)):
+        for i, x in enumerate(train_loader):
             optimizer.zero_grad()
-            x = x.to(cfg.device)
-            t = diffuser.sample_timesteps(cfg.batch_size).to(cfg.device)
+            x = x.to(cfg.device).float()
+            t = diffuser.sample_timesteps(x.shape[0]).to(cfg.device)
             x_t, eps = diffuser.noise_data(x, t)  # each item in batch gets different level of noise based on timestep
             output = denoiser(x_t, t)
             loss = criterion(output, eps)
@@ -122,10 +123,12 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, c
             epoch_loss += loss.item()
         train_losses.append(epoch_loss / l)
 
-        if epoch % cfg.test_every:
+        if epoch % cfg.test_every == 0:
             test_epoch_loss = evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, test_epoch)
             test_losses.append(test_epoch_loss)
             test_epoch += 1
+
+    return train_losses, test_losses
 
 
 def main():
@@ -150,9 +153,9 @@ def main():
                               num_layers=cfg.denoiser_layers, time_dim=128, device=cfg.device).to(cfg.device).float()
     optimizer = AdamW(denoiser.parameters(), cfg.learning_rate)
     criterion = nn.MSELoss()
-    summary = SummaryWriter()
+    summary = SummaryWriter(cfg.summary_path)
 
-    train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, cfg, summary)
+    train_losses, test_losses = train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, cfg, summary)
 
 
 if __name__ == "__main__":

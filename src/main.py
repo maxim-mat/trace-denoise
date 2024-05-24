@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from torch.optim import AdamW
 import torch.nn as nn
 import torch
+from tqdm import tqdm
 
 from dataset.dataset import SaladsDataset
 from sklearn.model_selection import train_test_split
@@ -19,6 +20,7 @@ from ddpm.modules import UNet
 @dataclass
 class Config:
     data_path: str = None
+    summary_path: str = None
     device: str = None
     num_epochs: int = None
     learning_rate: float = None
@@ -51,8 +53,8 @@ def initialize():
 class SimpleDenoiser(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers, time_dim, device):
         super(SimpleDenoiser, self).__init__()
-        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True)
-        self.fc = nn.Linear(hidden_dim, output_dim)
+        self.lstm = nn.LSTM(input_dim, hidden_dim, num_layers, batch_first=True).float()
+        self.fc = nn.Linear(hidden_dim, output_dim).float()
         self.time_dim = time_dim
         self.device = device
         self.embed_layer = nn.Sequential(
@@ -61,7 +63,7 @@ class SimpleDenoiser(nn.Module):
                 time_dim,
                 input_dim
             ),
-        )
+        ).float()
 
     def pos_encoding(self, t, channels):
         inv_freq = 1.0 / (
@@ -76,24 +78,54 @@ class SimpleDenoiser(nn.Module):
     def forward(self, x, t):
         t = t.unsqueeze(-1).type(torch.float)
         t = self.pos_encoding(t, self.time_dim)
-        emb = self.embed_layer(t)[:, :, None, None].repeat(1, 1, x.shape[-2], x.shape[-1])
-        out, _ = self.lstm(x + emb)
+        emb = self.embed_layer(t).unsqueeze(1).repeat(1, x.shape[1], 1)
+        combined = (x + emb).float()
+        out, _ = self.lstm(combined)
         out = self.fc(out)
         return out
 
 
-def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, cfg):
-    summary = SummaryWriter()
-    for epoch in range(cfg.num_epochs):
-        for x in train_loader:
-            optimizer.zero_grad()
+def evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch):
+    denoiser.eval()
+    total_loss = 0.0
+    l = len(test_loader)
+    with torch.no_grad():
+        for i, x in tqdm(enumerate(test_loader)):
             x = x.to(cfg.device)
-            t = diffuser.sample_timesteps(cfg.num_timesteps).to(cfg.device)
+            t = diffuser.sample_timesteps(cfg.batch_size).to(cfg.device)
             x_t, eps = diffuser.noise_data(x, t)
             output = denoiser(x_t, t)
-            loss = criterion(output, x)
+            loss = criterion(output, eps)
+            total_loss += loss.item()
+            summary.add_scalar("MSE_train", loss.item(), global_step=epoch * l + i)
+    average_loss = total_loss / l
+    return average_loss
+
+
+def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, cfg, summary):
+    train_losses, test_losses = [], []
+    l = len(train_loader)
+    test_epoch = 0
+    for epoch in tqdm(range(cfg.num_epochs)):
+        epoch_loss = 0.0
+        for i, x in tqdm(enumerate(train_loader)):
+            optimizer.zero_grad()
+            x = x.to(cfg.device)
+            t = diffuser.sample_timesteps(cfg.batch_size).to(cfg.device)
+            x_t, eps = diffuser.noise_data(x, t)  # each item in batch gets different level of noise based on timestep
+            output = denoiser(x_t, t)
+            loss = criterion(output, eps)
             loss.backward()
             optimizer.step()
+
+            summary.add_scalar("MSE_train", loss.item(), global_step=epoch * l + i)
+            epoch_loss += loss.item()
+        train_losses.append(epoch_loss / l)
+
+        if epoch % cfg.test_every:
+            test_epoch_loss = evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, test_epoch)
+            test_losses.append(test_epoch_loss)
+            test_epoch += 1
 
 
 def main():
@@ -115,11 +147,12 @@ def main():
 
     diffuser = Diffusion()
     denoiser = SimpleDenoiser(input_dim=19, hidden_dim=cfg.denoiser_hidden, output_dim=19,
-                              num_layers=cfg.denoiser_layers, time_dim=128, device=cfg.device).to(cfg.device)
+                              num_layers=cfg.denoiser_layers, time_dim=128, device=cfg.device).to(cfg.device).float()
     optimizer = AdamW(denoiser.parameters(), cfg.learning_rate)
     criterion = nn.MSELoss()
+    summary = SummaryWriter()
 
-    train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, cfg)
+    train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, cfg, summary)
 
 
 if __name__ == "__main__":

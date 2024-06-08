@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import pickle as pkl
 from dataclasses import dataclass
 
@@ -50,6 +51,19 @@ def initialize():
     return args, cfg, dataset
 
 
+def save_ckpt(model, opt, epoch, cfg, train_loss, test_loss, best=False):
+    ckpt = {
+        'epoch': epoch,
+        'model_state': model.state_dict(),
+        'opt_state': opt.state_dict(),
+        'train_loss': train_loss,
+        'test_loss': test_loss
+    }
+    torch.save(ckpt, os.path.join(cfg.summary_path, 'last.ckpt'))
+    if best:
+        torch.save(ckpt, os.path.join(cfg.summary_path, 'best.ckpt'))
+
+
 class SimpleDenoiser(nn.Module):
     def __init__(self, input_dim, hidden_dim, output_dim, num_layers, time_dim, device):
         super(SimpleDenoiser, self).__init__()
@@ -85,6 +99,46 @@ class SimpleDenoiser(nn.Module):
         return out
 
 
+def denoise_single(diffuser, denoiser, x_t, t, cfg):
+    x_hat = x_t
+    denoiser.eval()
+    for i in reversed(range(1, t.item())):
+        ti = (torch.ones(1) * i).long().to(cfg.device)
+        eps_hat = denoiser(x_hat, ti)
+        alpha = diffuser.alpha[t][:, None, None]
+        alpha_hat = diffuser.alpha_hat[t][:, None, None]
+        x_hat = 1 / torch.sqrt(alpha) * (x_hat - ((1 - alpha) / (torch.sqrt(1 - alpha_hat))) * eps_hat)
+    denoiser.train()
+    return x_hat
+
+
+def levenshtein_dist(x, y):
+    m, n = x.shape[0], y.shape[0]
+    dp = [[0] * (n + 1) for _ in range(m + 1)]
+
+    for i in range(m + 1):
+        dp[i][0] = i
+    for j in range(n + 1):
+        dp[0][j] = j
+
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            if x[i - 1] == y[j - 1]:
+                dp[i][j] = dp[i - 1][j - 1]
+            else:
+                dp[i][j] = 1 + min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
+
+    return dp[m][n]
+
+
+def levenshtein_dist_batch(x, y):
+    x, y = torch.argmax(x, dim=-1), torch.argmax(y, dim=-1)
+    dist = 0
+    for xi, yi in tqdm(zip(x, y)):
+        dist += levenshtein_dist(xi.to('cpu'), yi.to('cpu'))
+    return dist / x.shape[0]
+
+
 def evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch):
     denoiser.eval()
     total_loss = 0.0
@@ -94,11 +148,14 @@ def evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch):
             x = x.to(cfg.device).float()
             t = diffuser.sample_timesteps(x.shape[0]).to(cfg.device)
             x_t, eps = diffuser.noise_data(x, t)
+            x_hat = torch.cat([denoise_single(diffuser, denoiser, xi.unsqueeze(0), ti.unsqueeze(0), cfg) for xi, ti in
+                               zip(x_t, t)], dim=0)
             output = denoiser(x_t, t)
             loss = criterion(output, eps)
             total_loss += loss.item()
             summary.add_scalar("MSE_test", loss.item(), global_step=epoch * l + i)
     average_loss = total_loss / l
+    denoiser.train()
     return average_loss
 
 
@@ -106,8 +163,9 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, c
     train_losses, test_losses = [], []
     l = len(train_loader)
     test_epoch = 0
+    best_loss = float('inf')
+    denoiser.train()
     for epoch in tqdm(range(cfg.num_epochs)):
-        denoiser.train()
         epoch_loss = 0.0
         for i, x in enumerate(train_loader):
             optimizer.zero_grad()
@@ -127,6 +185,9 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, c
             test_epoch_loss = evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, test_epoch)
             test_losses.append(test_epoch_loss)
             test_epoch += 1
+
+            save_ckpt(denoiser, optimizer, epoch, cfg, train_losses[-1], test_losses[-1], test_epoch_loss < best_loss)
+            best_loss = test_epoch_loss if test_epoch_loss < best_loss else best_loss
 
     return train_losses, test_losses
 
@@ -148,7 +209,7 @@ def main():
         collate_fn=lambda batch: pad_sequence(batch, batch_first=True, padding_value=-1)
     )
 
-    diffuser = Diffusion()
+    diffuser = Diffusion(noise_steps=cfg.num_timesteps)
     denoiser = SimpleDenoiser(input_dim=19, hidden_dim=cfg.denoiser_hidden, output_dim=19,
                               num_layers=cfg.denoiser_layers, time_dim=128, device=cfg.device).to(cfg.device).float()
     optimizer = AdamW(denoiser.parameters(), cfg.learning_rate)

@@ -18,6 +18,8 @@ from ddpm.ddmp_multinomial import Diffusion
 import plotly.express as px
 import logging
 from denoisers.SimpleDenoiser import SimpleDenoiser
+from denoisers.UnetDenoiser import UnetDenoiser
+from denoisers.ConvolutionDenoiser import ConvolutionDenoiser
 
 
 @dataclass
@@ -33,6 +35,7 @@ class Config:
     denoiser_hidden: int = None
     denoiser_layers: int = None
     batch_size: int = None
+    denoiser: str = None
 
 
 def parse_args():
@@ -82,7 +85,7 @@ def evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch):
     l = len(test_loader)
     with torch.no_grad():
         for i, x in enumerate(test_loader):
-            x = x.to(cfg.device).float()
+            x = x.permute(0, 2, 1).to(cfg.device).float()
             t = diffuser.sample_timesteps(x.shape[0]).to(cfg.device)
             x_t, eps = diffuser.noise_data(x, t)
             # if i == 0:
@@ -111,7 +114,7 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, c
         epoch_loss = 0.0
         for i, x in enumerate(train_loader):
             optimizer.zero_grad()
-            x = x.to(cfg.device).float()
+            x = x.permute(0, 2, 1).to(cfg.device).float()
             t = diffuser.sample_timesteps(x.shape[0]).to(cfg.device)
             x_t, eps = diffuser.noise_data(x, t)  # each item in batch gets different level of noise based on timestep
             output = denoiser(x_t, t)
@@ -139,24 +142,29 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, c
 
 def main():
     args, cfg, dataset, logger = initialize()
-    train_dataset, test_dataset = train_test_split(dataset, train_size=0.8, shuffle=True, random_state=17)
-    train_salads = SaladsDataset(train_dataset)
-    test_salads = SaladsDataset(test_dataset)
+    salads_dataset = SaladsDataset(dataset)
+    train_dataset, test_dataset = train_test_split(salads_dataset, train_size=0.8, shuffle=True, random_state=17)
 
     train_loader = DataLoader(
-        train_salads,
+        train_dataset,
         batch_size=cfg.batch_size,
-        collate_fn=lambda batch: pad_sequence(batch, batch_first=True, padding_value=-1)
     )
     test_loader = DataLoader(
-        test_salads,
+        test_dataset,
         batch_size=cfg.batch_size,
-        collate_fn=lambda batch: pad_sequence(batch, batch_first=True, padding_value=-1)
     )
 
     diffuser = Diffusion(noise_steps=cfg.num_timesteps)
-    denoiser = SimpleDenoiser(input_dim=19, hidden_dim=cfg.denoiser_hidden, output_dim=19,
-                              num_layers=cfg.denoiser_layers, time_dim=128, device=cfg.device).to(cfg.device).float()
+
+    if cfg.denoiser == "unet":
+        denoiser = UnetDenoiser(in_ch=19, out_ch=19, max_input_dim=salads_dataset.sequence_length).to(
+            cfg.device).float()
+    elif cfg.denoiser == "conv":
+        denoiser = ConvolutionDenoiser(input_dim=19, output_dim=19, num_layers=10).to(cfg.device).float()
+    else:
+        denoiser = SimpleDenoiser(input_dim=19, hidden_dim=cfg.denoiser_hidden, output_dim=19,
+                                  num_layers=cfg.denoiser_layers, time_dim=128, device=cfg.device).to(
+            cfg.device).float()
     optimizer = AdamW(denoiser.parameters(), cfg.learning_rate)
     criterion = nn.MSELoss()
     summary = SummaryWriter(cfg.summary_path)

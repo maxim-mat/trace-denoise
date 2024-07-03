@@ -4,7 +4,7 @@ from src.modules.DoubleConv import DoubleConv
 
 
 class ConvolutionDenoiser(nn.Module):
-    def __init__(self, input_dim, output_dim, num_layers, time_dim, device, hidden_dim=None, residual=False):
+    def __init__(self, input_dim, output_dim, num_layers, time_dim=128, device="cuda", hidden_dim=None, residual=False):
         super(ConvolutionDenoiser, self).__init__()
         self.model = nn.Sequential(
             *[DoubleConv(input_dim, output_dim, hidden_dim, residual) for _ in num_layers]

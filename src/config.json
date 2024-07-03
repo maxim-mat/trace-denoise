@@ -1,13 +1,14 @@
 {
   "data_path": "../data/pickles/50_salads_one_hot.pkl",
-  "summary_path": "run_2",
+  "summary_path": "unet_more_epochs",
   "device": "cuda",
-  "num_epochs": 3000,
-  "learning_rate": 1e-5,
+  "num_epochs": 5000,
+  "learning_rate": 5e-6,
   "num_timesteps": 200,
   "num_workers": 16,
   "test_every": 10,
   "denoiser_hidden": 256,
   "denoiser_layers": 2,
-  "batch_size": 10
+  "batch_size": 10,
+  "denoiser": "unet"
 }

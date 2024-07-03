@@ -7,7 +7,7 @@ from src.modules.SelfAttention import SelfAttention
 
 
 class UnetDenoiser(nn.Module):
-    def __init__(self, in_ch, out_ch, max_input_dim, time_dim, device):
+    def __init__(self, in_ch, out_ch, max_input_dim, time_dim=128, device="cuda"):
         super().__init__()
         self.device = device
         self.time_dim = time_dim
@@ -67,6 +67,6 @@ class UnetDenoiser(nn.Module):
         x = self.sa5(x)
         x = self.up3(x, x1, t)
         del x1
-        # x = self.sa6(x)
+        x = self.sa6(x)
         x = self.outc(x)
         return x

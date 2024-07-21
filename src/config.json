@@ -1,6 +1,6 @@
 {
   "data_path": "../data/pickles/50_salads_one_hot.pkl",
-  "summary_path": "unet_more_epochs",
+  "summary_path": "debug",
   "device": "cuda",
   "num_epochs": 5000,
   "learning_rate": 5e-6,

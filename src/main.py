@@ -3,6 +3,7 @@ import json
 import os
 import pickle as pkl
 from dataclasses import dataclass
+import random
 
 import numpy as np
 from sklearn.metrics import roc_auc_score
@@ -11,10 +12,9 @@ import torch.nn as nn
 import torch
 from tqdm import tqdm
 
-from dataset.dataset import SaladsDataset
+from src.dataset import SaladsDataset
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
-from torch.nn.utils.rnn import pad_sequence
 from tensorboardX import SummaryWriter
 from ddpm.ddmp_multinomial import Diffusion
 import plotly.express as px
@@ -24,6 +24,9 @@ from denoisers.UnetDenoiser import UnetDenoiser
 from denoisers.ConvolutionDenoiser import ConvolutionDenoiser
 from utils import calculate_metrics
 from scipy.stats import wasserstein_distance
+import warnings
+
+warnings.filterwarnings("ignore")
 
 
 @dataclass
@@ -38,8 +41,10 @@ class Config:
     test_every: int = None
     denoiser_hidden: int = None
     denoiser_layers: int = None
+    num_classes: int = None
     batch_size: int = None
     denoiser: str = None
+    eval_train: bool = None
 
 
 def parse_args():
@@ -96,12 +101,19 @@ def evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch):
                 [diffuser.denoise(denoiser, xi.unsqueeze(0), ti.unsqueeze(0)) for xi, ti in
                  zip(x_t, t)], dim=0
             )
+            if epoch % 100 == 0:
+                with open(os.path.join(cfg.summary_path, f"epoch_{epoch}_batch_{i}_test.pkl"), "wb") as f:
+                    pkl.dump({"original": x, "denoised": x_hat}, f)
             x_hat_softmax = torch.softmax(x_hat, dim=1)
             wasserstein_dist = np.mean(
                 [wasserstein_distance(xi, xhi) for xi, xhi in
                  zip(torch.argmax(x, dim=1).to('cpu'), torch.argmax(x_hat_softmax, dim=1).to('cpu'))])
-            auc = np.mean([roc_auc_score(xi, xhi.transpose(0, 1), average='macro', multi_class='ovr') for xi, xhi in
-                           zip(torch.argmax(x, dim=1).to('cpu'), x_hat_softmax.to('cpu'))])
+            try:
+                auc = roc_auc_score(torch.cat([x for x in torch.argmax(x, dim=1).to('cpu')], dim=0),
+                                    torch.cat([x for x in x_hat_softmax.to('cpu')], dim=1).transpose(0, 1),
+                                    average='macro', multi_class='ovr')
+            except Exception as e:
+                auc = -1
             acc, recall, precision, f1 = calculate_metrics(torch.argmax(x, dim=1).to('cpu'),
                                                            torch.argmax(x_hat_softmax, dim=1).to('cpu'))
             accs.append(acc)
@@ -120,22 +132,22 @@ def evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch):
             loss = criterion(output, eps)
             total_loss += loss.item()
             summary.add_scalar("MSE_test", loss.item(), global_step=epoch * l + i)
-    average_loss = total_loss / l
-    average_acc = np.mean(accs)
-    average_recall = np.mean(recalls)
-    average_precision = np.mean(precisions)
-    average_f1 = np.mean(f1s)
-    average_auc = np.mean(aucs)
-    average_dist = np.mean(dists)
-    denoiser.train()
+        average_loss = total_loss / l
+        average_acc = np.mean(accs)
+        average_recall = np.mean(recalls)
+        average_precision = np.mean(precisions)
+        average_f1 = np.mean(f1s)
+        average_auc = np.mean(aucs)
+        average_dist = np.mean(dists)
+        denoiser.train()
     return average_loss, average_acc, average_recall, average_precision, average_f1, average_auc, average_dist
 
 
 def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, cfg, summary, logger):
-    train_losses, test_losses, test_dist, test_acc, test_precision, tests_recall, test_f1, test_auc = \
+    train_losses, test_losses, test_dist, test_acc, test_precision, test_recall, test_f1, test_auc = \
         [], [], [], [], [], [], [], []
+    train_dist, train_acc, train_precision, train_recall, train_f1, train_auc = [], [], [], [], [], []
     l = len(train_loader)
-    test_epoch = 0
     best_loss = float('inf')
     denoiser.train()
     for epoch in tqdm(range(cfg.num_epochs)):
@@ -156,16 +168,67 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, c
 
         if epoch % cfg.test_every == 0:
             logger.info("testing epoch")
+            if cfg.eval_train:
+                denoiser.eval()
+                with torch.no_grad():
+                    sample_index = random.choice(range(len(train_loader)))
+                    for i, batch in enumerate(train_loader):
+                        if i == sample_index:
+                            x = batch
+                            break
+                    x = x.permute(0, 2, 1).to(cfg.device).float()
+                    t = diffuser.sample_timesteps(x.shape[0]).to(cfg.device)
+                    x_t, eps = diffuser.noise_data(x, t)
+                    x_hat = torch.cat(
+                        [diffuser.denoise(denoiser, xi.unsqueeze(0), ti.unsqueeze(0)) for xi, ti in
+                         zip(x_t, t)], dim=0
+                    )
+                    if epoch % 100 == 0:
+                        with open(os.path.join(cfg.summary_path, f"epoch_{epoch}_train.pkl"), "wb") as f:
+                            pkl.dump({"original": x, "denoised": x_hat}, f)
+                    x_hat_softmax = torch.softmax(x_hat, dim=1)
+                    wasserstein_dist = np.mean(
+                        [wasserstein_distance(xi, xhi) for xi, xhi in
+                         zip(torch.argmax(x, dim=1).to('cpu'), torch.argmax(x_hat_softmax, dim=1).to('cpu'))]
+                    )
+                    try:
+                        auc = roc_auc_score(torch.cat([x for x in torch.argmax(x, dim=1).to('cpu')], dim=0),
+                                            torch.cat([x for x in x_hat_softmax.to('cpu')], dim=1).transpose(0, 1),
+                                            average='macro', multi_class='ovr')
+                    except Exception as e:
+                        auc = -1
+                    acc, recall, precision, f1 = calculate_metrics(torch.argmax(x, dim=1).to('cpu'),
+                                                                   torch.argmax(x_hat_softmax, dim=1).to('cpu'))
+                    train_acc.append(acc)
+                    train_recall.append(recall)
+                    train_precision.append(precision)
+                    train_f1.append(f1)
+                    train_auc.append(auc)
+                    train_dist.append(wasserstein_dist)
+                    summary.add_scalar("dist_train", wasserstein_dist, global_step=epoch * l)
+                    summary.add_scalar("accuracy_train", acc, global_step=epoch * l)
+                    summary.add_scalar("recall_train", recall, global_step=epoch * l)
+                    summary.add_scalar("precision_train", precision, global_step=epoch * l)
+                    summary.add_scalar("f1_train", f1, global_step=epoch * l)
+                    summary.add_scalar("auc_train", auc, global_step=epoch * l)
+                denoiser.train()
+
             test_epoch_loss, test_epoch_acc, test_epoch_recall, test_epoch_precision, test_epoch_f1, test_epoch_auc, \
-                test_epoch_dist = evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, test_epoch)
+                test_epoch_dist = evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch)
             test_dist.append(test_epoch_dist)
             test_losses.append(test_epoch_loss)
-            test_epoch += 1
+            test_acc.append(test_epoch_acc)
+            test_recall.append(test_epoch_recall)
+            test_precision.append(test_epoch_precision)
+            test_f1.append(test_epoch_f1)
+            test_auc.append(test_epoch_auc)
             logger.info("saving model")
-            save_ckpt(denoiser, optimizer, epoch, cfg, train_losses[-1], test_losses[-1], test_epoch_loss < best_loss)
+            save_ckpt(denoiser, optimizer, epoch, cfg, train_losses[-1], test_losses[-1],
+                      test_epoch_loss < best_loss)
             best_loss = test_epoch_loss if test_epoch_loss < best_loss else best_loss
 
-    return train_losses, test_losses, test_dist, test_acc, test_precision, tests_recall, test_f1, test_auc
+    return (train_losses, test_losses, test_dist, test_acc, test_precision, test_recall, test_f1, test_auc,
+            train_acc, train_recall, train_precision, train_f1, train_auc, train_dist)
 
 
 def main():
@@ -176,28 +239,33 @@ def main():
     train_loader = DataLoader(
         train_dataset,
         batch_size=cfg.batch_size,
+        shuffle=True
     )
     test_loader = DataLoader(
         test_dataset,
         batch_size=cfg.batch_size,
+        shuffle=True
     )
 
     diffuser = Diffusion(noise_steps=cfg.num_timesteps)
 
     if cfg.denoiser == "unet":
-        denoiser = UnetDenoiser(in_ch=19, out_ch=19, max_input_dim=salads_dataset.sequence_length).to(
+        denoiser = UnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
+                                max_input_dim=salads_dataset.sequence_length).to(
             cfg.device).float()
     elif cfg.denoiser == "conv":
-        denoiser = ConvolutionDenoiser(input_dim=19, output_dim=19, num_layers=10).to(cfg.device).float()
+        denoiser = ConvolutionDenoiser(input_dim=cfg.num_classes, output_dim=cfg.num_classes, num_layers=10).to(
+            cfg.device).float()
     else:
-        denoiser = SimpleDenoiser(input_dim=19, hidden_dim=cfg.denoiser_hidden, output_dim=19,
+        denoiser = SimpleDenoiser(input_dim=cfg.num_classes, hidden_dim=cfg.denoiser_hidden, output_dim=cfg.num_classes,
                                   num_layers=cfg.denoiser_layers, time_dim=128, device=cfg.device).to(
             cfg.device).float()
     optimizer = AdamW(denoiser.parameters(), cfg.learning_rate)
     criterion = nn.MSELoss()
     summary = SummaryWriter(cfg.summary_path)
 
-    train_losses, test_losses, test_dist, test_acc, test_precision, tests_recall, test_f1, test_auc = \
+    (train_losses, test_losses, test_dist, test_acc, test_precision, tests_recall, test_f1, test_auc, train_acc,
+     train_recall, train_precision, train_f1, train_auc, train_dist) = \
         train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, cfg, summary, logger)
     px.line(train_losses).write_html(os.path.join(cfg.summary_path, "train_loss.html"))
     px.line(test_losses).write_html(os.path.join(cfg.summary_path, "test_losses.html"))
@@ -207,6 +275,12 @@ def main():
     px.line(tests_recall).write_html(os.path.join(cfg.summary_path, "tests_recall.html"))
     px.line(test_f1).write_html(os.path.join(cfg.summary_path, "test_f1.html"))
     px.line(test_auc).write_html(os.path.join(cfg.summary_path, "test_auc.html"))
+    px.line(train_acc).write_html(os.path.join(cfg.summary_path, "train_acc.html"))
+    px.line(train_recall).write_html(os.path.join(cfg.summary_path, "train_recall.html"))
+    px.line(train_precision).write_html(os.path.join(cfg.summary_path, "train_precision.html"))
+    px.line(train_f1).write_html(os.path.join(cfg.summary_path, "train_f1.html"))
+    px.line(train_auc).write_html(os.path.join(cfg.summary_path, "train_auc.html"))
+    px.line(train_dist).write_html(os.path.join(cfg.summary_path, "train_dist.html"))
 
 
 if __name__ == "__main__":

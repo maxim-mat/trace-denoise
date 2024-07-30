@@ -3,7 +3,7 @@ import torch
 import torchvision
 from PIL import Image
 from matplotlib import pyplot as plt
-from dataset.dataset import ImageDataset
+from src.dataset import ImageDataset
 from torch.utils.data import DataLoader
 import pickle as pkl
 import numpy as np

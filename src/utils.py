@@ -44,11 +44,11 @@ def levenshtein_dist_batch(x, y):
 
 
 def calculate_metrics(y_true, y_pred):
-    accs, recalls, precisions, f1s, aucs = [], [], [], [], []
+    accs, recalls, precisions, f1s = [], [], [], []
     for yti, ypi in zip(y_true, y_pred):
         accs.append(accuracy_score(yti, ypi))
         precisions.append(precision_score(yti, ypi, average='macro', zero_division=0))
         recalls.append(recall_score(yti, ypi, average='macro', zero_division=0))
         f1s.append(f1_score(yti, ypi, average='macro', zero_division=0))
         # aucs.append(roc_auc_score(yti, ypi, average='macro', multi_class='ovr'))
-    return mean(accs), mean(recalls), mean(precisions), mean(f1s), mean(aucs)
+    return mean(accs), mean(recalls), mean(precisions), mean(f1s)

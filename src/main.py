@@ -12,7 +12,7 @@ import torch.nn as nn
 import torch
 from tqdm import tqdm
 
-from src.dataset import SaladsDataset
+from dataset.dataset import SaladsDataset
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
@@ -45,6 +45,7 @@ class Config:
     batch_size: int = None
     denoiser: str = None
     eval_train: bool = None
+    mode: str = None
 
 
 def parse_args():
@@ -98,7 +99,7 @@ def evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch):
             t = diffuser.sample_timesteps(x.shape[0]).to(cfg.device)
             x_t, eps = diffuser.noise_data(x, t)
             x_hat = torch.cat(
-                [diffuser.denoise(denoiser, xi.unsqueeze(0), ti.unsqueeze(0)) for xi, ti in
+                [diffuser.denoise(denoiser, xi.unsqueeze(0), ti.unsqueeze(0), cfg.mode) for xi, ti in
                  zip(x_t, t)], dim=0
             )
             if epoch % 100 == 0:
@@ -129,7 +130,7 @@ def evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch):
             summary.add_scalar("f1_test", f1, global_step=epoch * l + i)
             summary.add_scalar("auc_test", auc, global_step=epoch * l + i)
             output = denoiser(x_t, t)
-            loss = criterion(output, eps)
+            loss = criterion(output, eps) if cfg.mode == 'noise' else criterion(output, x)
             total_loss += loss.item()
             summary.add_scalar("MSE_test", loss.item(), global_step=epoch * l + i)
         average_loss = total_loss / l
@@ -158,7 +159,7 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, c
             t = diffuser.sample_timesteps(x.shape[0]).to(cfg.device)
             x_t, eps = diffuser.noise_data(x, t)  # each item in batch gets different level of noise based on timestep
             output = denoiser(x_t, t)
-            loss = criterion(output, eps)
+            loss = criterion(output, eps) if cfg.mode == 'noise' else criterion(output, x)
             loss.backward()
             optimizer.step()
 
@@ -180,7 +181,7 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, c
                     t = diffuser.sample_timesteps(x.shape[0]).to(cfg.device)
                     x_t, eps = diffuser.noise_data(x, t)
                     x_hat = torch.cat(
-                        [diffuser.denoise(denoiser, xi.unsqueeze(0), ti.unsqueeze(0)) for xi, ti in
+                        [diffuser.denoise(denoiser, xi.unsqueeze(0), ti.unsqueeze(0), cfg.mode) for xi, ti in
                          zip(x_t, t)], dim=0
                     )
                     if epoch % 100 == 0:
@@ -261,7 +262,7 @@ def main():
                                   num_layers=cfg.denoiser_layers, time_dim=128, device=cfg.device).to(
             cfg.device).float()
     optimizer = AdamW(denoiser.parameters(), cfg.learning_rate)
-    criterion = nn.MSELoss()
+    criterion = nn.MSELoss() if cfg.mode == 'noise' else nn.CrossEntropyLoss()
     summary = SummaryWriter(cfg.summary_path)
 
     (train_losses, test_losses, test_dist, test_acc, test_precision, tests_recall, test_f1, test_auc, train_acc,

@@ -27,12 +27,15 @@ def preprocess(data):
 
 
 class SaladsDataset(Dataset):
-    def __init__(self, data):
-        self.__data = preprocess(data)
+    def __init__(self, labels, data=None):
+        if data is not None and len(data) != len(labels):
+            raise ValueError("data and labels must be of same length")
+        self.__data = preprocess(data) if data is not None else None
+        self.__labels = preprocess(labels)
         self.sequence_length = self.__data.shape[1]
 
     def __len__(self):
         return len(self.__data)
 
     def __getitem__(self, idx):
-        return self.__data[idx]
+        return self.__labels[idx], self.__data[idx] if self.__data is not None else None

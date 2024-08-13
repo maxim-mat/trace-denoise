@@ -16,12 +16,13 @@ from dataset.dataset import SaladsDataset
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
 from tensorboardX import SummaryWriter
-from ddpm.ddmp_multinomial import Diffusion
+from ddpm.ddpm_multinomial import Diffusion
 import plotly.express as px
 import logging
 from denoisers.SimpleDenoiser import SimpleDenoiser
 from denoisers.UnetDenoiser import UnetDenoiser
 from denoisers.ConvolutionDenoiser import ConvolutionDenoiser
+from denoisers.ConditionalUnetDenoiser import ConditionalUnetDenoiser
 from utils import calculate_metrics
 from scipy.stats import wasserstein_distance
 import warnings
@@ -45,7 +46,13 @@ class Config:
     batch_size: int = None
     denoiser: str = None
     eval_train: bool = None
+    predict_on: str = None
+    conditional_dropout: float = None
     mode: str = None
+
+    def __post_init__(self):
+        if self.mode == "uncond":
+            self.conditional_dropout = 1.0
 
 
 def parse_args():
@@ -94,14 +101,13 @@ def evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch):
     accs, recalls, precisions, f1s, aucs, dists = [], [], [], [], [], []
     l = len(test_loader)
     with torch.no_grad():
-        for i, x in enumerate(test_loader):
+        for i, (x, y) in enumerate(test_loader):
             x = x.permute(0, 2, 1).to(cfg.device).float()
+            y = y.permute(0, 2, 1).to(cfg.device).float()
             t = diffuser.sample_timesteps(x.shape[0]).to(cfg.device)
             x_t, eps = diffuser.noise_data(x, t)
-            x_hat = torch.cat(
-                [diffuser.denoise(denoiser, xi.unsqueeze(0), ti.unsqueeze(0), cfg.mode) for xi, ti in
-                 zip(x_t, t)], dim=0
-            )
+            x_hat = diffuser.sample(denoiser, y.shape[0], cfg.num_classes, denoiser.max_input_dim, y,
+                                    cfg.predict_on)
             if epoch % 100 == 0:
                 with open(os.path.join(cfg.summary_path, f"epoch_{epoch}_batch_{i}_test.pkl"), "wb") as f:
                     pkl.dump({"original": x, "denoised": x_hat}, f)
@@ -129,8 +135,8 @@ def evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch):
             summary.add_scalar("precision_test", precision, global_step=epoch * l + i)
             summary.add_scalar("f1_test", f1, global_step=epoch * l + i)
             summary.add_scalar("auc_test", auc, global_step=epoch * l + i)
-            output = denoiser(x_t, t)
-            loss = criterion(output, eps) if cfg.mode == 'noise' else criterion(output, x)
+            output = denoiser(x_t, t, y)
+            loss = criterion(output, eps) if cfg.predict_on == 'noise' else criterion(output, x)
             total_loss += loss.item()
             summary.add_scalar("MSE_test", loss.item(), global_step=epoch * l + i)
         average_loss = total_loss / l
@@ -153,13 +159,16 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, c
     denoiser.train()
     for epoch in tqdm(range(cfg.num_epochs)):
         epoch_loss = 0.0
-        for i, x in enumerate(train_loader):
+        for i, (x, y) in enumerate(train_loader):
             optimizer.zero_grad()
             x = x.permute(0, 2, 1).to(cfg.device).float()
+            y = y.permute(0, 2, 1).to(cfg.device).float()
             t = diffuser.sample_timesteps(x.shape[0]).to(cfg.device)
             x_t, eps = diffuser.noise_data(x, t)  # each item in batch gets different level of noise based on timestep
-            output = denoiser(x_t, t)
-            loss = criterion(output, eps) if cfg.mode == 'noise' else criterion(output, x)
+            if np.random.random() < cfg.conditional_dropout:
+                y = None
+            output = denoiser(x_t, t, y)
+            loss = criterion(output, eps) if cfg.predict_on == 'noise' else criterion(output, x)
             loss.backward()
             optimizer.step()
 
@@ -175,15 +184,12 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, c
                     sample_index = random.choice(range(len(train_loader)))
                     for i, batch in enumerate(train_loader):
                         if i == sample_index:
-                            x = batch
+                            x, y = batch
                             break
                     x = x.permute(0, 2, 1).to(cfg.device).float()
-                    t = diffuser.sample_timesteps(x.shape[0]).to(cfg.device)
-                    x_t, eps = diffuser.noise_data(x, t)
-                    x_hat = torch.cat(
-                        [diffuser.denoise(denoiser, xi.unsqueeze(0), ti.unsqueeze(0), cfg.mode) for xi, ti in
-                         zip(x_t, t)], dim=0
-                    )
+                    y = y.permute(0, 2, 1).to(cfg.device).float()
+                    x_hat = diffuser.sample(denoiser, y.shape[0], cfg.num_classes, denoiser.max_input_dim, y,
+                                            cfg.predict_on)
                     if epoch % 100 == 0:
                         with open(os.path.join(cfg.summary_path, f"epoch_{epoch}_train.pkl"), "wb") as f:
                             pkl.dump({"original": x, "denoised": x_hat}, f)
@@ -234,7 +240,7 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, c
 
 def main():
     args, cfg, dataset, logger = initialize()
-    salads_dataset = SaladsDataset(dataset)
+    salads_dataset = SaladsDataset(dataset['target'], dataset['stochastic'])
     train_dataset, test_dataset = train_test_split(salads_dataset, train_size=0.8, shuffle=True, random_state=17)
 
     train_loader = DataLoader(
@@ -252,8 +258,10 @@ def main():
 
     if cfg.denoiser == "unet":
         denoiser = UnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
-                                max_input_dim=salads_dataset.sequence_length).to(
-            cfg.device).float()
+                                max_input_dim=salads_dataset.sequence_length).to(cfg.device).float()
+    elif cfg.denoiser == "unet_cond":
+        denoiser = ConditionalUnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
+                                           max_input_dim=salads_dataset.sequence_length).to(cfg.device).float()
     elif cfg.denoiser == "conv":
         denoiser = ConvolutionDenoiser(input_dim=cfg.num_classes, output_dim=cfg.num_classes, num_layers=10).to(
             cfg.device).float()
@@ -262,7 +270,7 @@ def main():
                                   num_layers=cfg.denoiser_layers, time_dim=128, device=cfg.device).to(
             cfg.device).float()
     optimizer = AdamW(denoiser.parameters(), cfg.learning_rate)
-    criterion = nn.MSELoss() if cfg.mode == 'noise' else nn.CrossEntropyLoss()
+    criterion = nn.MSELoss() if cfg.predict_on == 'noise' else nn.CrossEntropyLoss()
     summary = SummaryWriter(cfg.summary_path)
 
     (train_losses, test_losses, test_dist, test_acc, test_precision, tests_recall, test_f1, test_auc, train_acc,

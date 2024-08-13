@@ -50,14 +50,14 @@ class Diffusion:
         model.train()
         return x
 
-    def sample(self, model, n, num_categories, sequence_length, denoiser_output='noise'):
+    def sample(self, model, n, num_categories, sequence_length, y=None, denoiser_output='noise'):
         model.eval()
         with torch.no_grad():
             x = torch.randn((n, num_categories, sequence_length)).to(self.device)
             for i in reversed(range(1, self.noise_steps)):
                 t_tensor = (torch.ones(n) * i).long().to(self.device)
                 t_prev = (torch.ones(n) * (i - 1)).long().to(self.device)
-                predicted = model(x, t_tensor)
+                predicted = model(x, t_tensor, y)
                 alpha = self.alpha[t_tensor][:, None, None]
                 alpha_hat = self.alpha_hat[t_tensor][:, None, None]
                 alpha_hat_prev = self.alpha_hat[t_prev][:, None, None]

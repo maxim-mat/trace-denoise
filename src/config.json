@@ -1,12 +1,12 @@
 {
   "data_path": "../data/pickles/50_salads_unified.pkl",
-  "summary_path": "../runs/unet_cond_4",
+  "summary_path": "../runs/unet_cond_ce",
   "device": "cuda",
-  "num_epochs": 6000,
+  "num_epochs": 20000,
   "learning_rate": 5e-6,
   "num_timesteps": 1000,
   "num_workers": 16,
-  "test_every": 50,
+  "test_every": 100,
   "denoiser_hidden": 256,
   "denoiser_layers": 2,
   "num_classes": 20,
@@ -15,5 +15,5 @@
   "denoiser": "unet_cond",
   "eval_train": true,
   "mode": "cond",
-  "predict_on": "noise"
+  "predict_on": "original"
 }

@@ -21,8 +21,14 @@ def replace_values(x):
 
 
 def preprocess(data):
-    t = pad_sequence([F.pad(tensor(d), (0, 1, 0, 0), mode='constant', value=0) for d in data], batch_first=True,
-                     padding_value=-1)
+    dim_padding = [F.pad(tensor(d), (0, 1, 0, 0), mode='constant', value=0) for d in data]
+    i, max_length_sequence = max(enumerate(dim_padding), key=lambda y: len(y[1]))  # this will dictate the final shape of tensor
+    rem = len(max_length_sequence) % 8
+    if rem != 0:
+        for _ in range(8 - rem):
+            max_length_sequence = torch.vstack([max_length_sequence, max_length_sequence[-1]])
+        dim_padding[i] = max_length_sequence
+    t = pad_sequence(dim_padding, batch_first=True, padding_value=-1)
     return torch.stack([replace_values(ti) for ti in t])
 
 

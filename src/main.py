@@ -108,7 +108,7 @@ def evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch):
             x_t, eps = diffuser.noise_data(x, t)
             x_hat = diffuser.sample(denoiser, y.shape[0], cfg.num_classes, denoiser.max_input_dim, y,
                                     cfg.predict_on)
-            if epoch % 100 == 0:
+            if i == l:
                 with open(os.path.join(cfg.summary_path, f"epoch_{epoch}_batch_{i}_test.pkl"), "wb") as f:
                     pkl.dump({"original": x, "denoised": x_hat}, f)
             x_hat_softmax = torch.softmax(x_hat, dim=1)
@@ -241,7 +241,7 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, c
 def main():
     args, cfg, dataset, logger = initialize()
     salads_dataset = SaladsDataset(dataset['target'], dataset['stochastic'])
-    train_dataset, test_dataset = train_test_split(salads_dataset, train_size=0.8, shuffle=True, random_state=17)
+    train_dataset, test_dataset = train_test_split(salads_dataset, train_size=0.9, shuffle=True, random_state=17)
 
     train_loader = DataLoader(
         train_dataset,

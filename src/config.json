@@ -1,6 +1,6 @@
 {
-  "data_path": "../data/pickles/50_salads_unified.pkl",
-  "summary_path": "../runs/unet_cond_ce_salads_42_75",
+  "data_path": "../data/pickles/breakfast_unified.pkl",
+  "summary_path": "../runs/unet_cond_ce_breakfast_42_75",
   "device": "cuda",
   "num_epochs": 3000,
   "learning_rate": 5e-6,
@@ -10,7 +10,7 @@
   "test_every": 200,
   "denoiser_hidden": 256,
   "denoiser_layers": 2,
-  "num_classes": 20,
+  "num_classes": 49,
   "batch_size": 5,
   "conditional_dropout": 0.1,
   "denoiser": "unet_cond",

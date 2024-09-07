@@ -272,6 +272,7 @@ def main():
         denoiser = SimpleDenoiser(input_dim=cfg.num_classes, hidden_dim=cfg.denoiser_hidden, output_dim=cfg.num_classes,
                                   num_layers=cfg.denoiser_layers, time_dim=128, device=cfg.device).to(
             cfg.device).float()
+    denoiser = nn.DataParallel(denoiser, device_ids=[0, 1])
     optimizer = AdamW(denoiser.parameters(), cfg.learning_rate)
     criterion = nn.MSELoss() if cfg.predict_on == 'noise' else nn.CrossEntropyLoss()
     summary = SummaryWriter(cfg.summary_path)

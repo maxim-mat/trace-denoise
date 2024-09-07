@@ -49,6 +49,8 @@ class Config:
     predict_on: str = None
     conditional_dropout: float = None
     mode: str = None
+    train_percent: float = None
+    seed: int = None
 
     def __post_init__(self):
         if self.mode == "uncond":
@@ -241,7 +243,8 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, c
 def main():
     args, cfg, dataset, logger = initialize()
     salads_dataset = SaladsDataset(dataset['target'], dataset['stochastic'])
-    train_dataset, test_dataset = train_test_split(salads_dataset, train_size=0.9, shuffle=True, random_state=17)
+    train_dataset, test_dataset = train_test_split(salads_dataset, train_size=cfg.train_percent, shuffle=True,
+                                                   random_state=cfg.seed)
 
     train_loader = DataLoader(
         train_dataset,
@@ -290,6 +293,30 @@ def main():
     px.line(train_f1).write_html(os.path.join(cfg.summary_path, "train_f1.html"))
     px.line(train_auc).write_html(os.path.join(cfg.summary_path, "train_auc.html"))
     px.line(train_dist).write_html(os.path.join(cfg.summary_path, "train_dist.html"))
+
+    final_results = {"train":
+        {
+            "loss": train_losses[-1],
+            "acc": train_acc[-1],
+            "precision": train_precision[-1],
+            "recall": train_recall[-1],
+            "f1": train_f1[-1],
+            "auc": train_auc[-1],
+            "dist": train_dist[-1]
+        },
+        "test":
+            {
+                "loss": test_losses[-1],
+                "acc": test_acc[-1],
+                "precision": test_precision[-1],
+                "recall": tests_recall[-1],
+                "f1": test_f1[-1],
+                "auc": test_auc[-1],
+                "dist": test_dist[-1]
+            }
+    }
+    with open(os.path.join(cfg.summary_path, "final_results.json"), "w") as f:
+        json.dump(final_results, f)
 
 
 if __name__ == "__main__":

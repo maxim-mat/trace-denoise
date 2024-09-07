@@ -1,16 +1,14 @@
-import os
-import torch
-import torch.nn as nn
-from matplotlib import pyplot as plt
-from tqdm import tqdm
-from torch import optim
-from utils import *
-from modules import UNet
-import logging
-from torch.utils.tensorboard import SummaryWriter
 import json
+import logging
+
+import torch.nn as nn
 from easydict import EasyDict as edict
-from torchsummary import summary
+from torch import optim
+from torch.utils.tensorboard import SummaryWriter
+from tqdm import tqdm
+
+from modules import UNet
+from utils import *
 
 logging.basicConfig(format="%(asctime)s - %(levelname)s: %(message)s", level=logging.INFO, datefmt="%I:%M:%S")
 

@@ -51,7 +51,8 @@ class Config:
     mode: str = None
     train_percent: float = None
     seed: int = None
-
+    max_seq_len: int = None
+  
     def __post_init__(self):
         if self.mode == "uncond":
             self.conditional_dropout = 1.0
@@ -108,7 +109,7 @@ def evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch):
             y = y.permute(0, 2, 1).to(cfg.device).float()
             t = diffuser.sample_timesteps(x.shape[0]).to(cfg.device)
             x_t, eps = diffuser.noise_data(x, t)
-            x_hat = diffuser.sample(denoiser, y.shape[0], cfg.num_classes, denoiser.max_input_dim, y,
+            x_hat = diffuser.sample(denoiser, y.shape[0], cfg.num_classes, cfg.max_seq_len, y,
                                     cfg.predict_on)
             if i == l:
                 with open(os.path.join(cfg.summary_path, f"epoch_{epoch}_batch_{i}_test.pkl"), "wb") as f:
@@ -190,7 +191,7 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, c
                             break
                     x = x.permute(0, 2, 1).to(cfg.device).float()
                     y = y.permute(0, 2, 1).to(cfg.device).float()
-                    x_hat = diffuser.sample(denoiser, y.shape[0], cfg.num_classes, denoiser.max_input_dim, y,
+                    x_hat = diffuser.sample(denoiser, y.shape[0], cfg.num_classes, cfg.max_seq_len, y,
                                             cfg.predict_on)
                     if epoch % 100 == 0:
                         with open(os.path.join(cfg.summary_path, f"epoch_{epoch}_train.pkl"), "wb") as f:
@@ -243,6 +244,7 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, c
 def main():
     args, cfg, dataset, logger = initialize()
     salads_dataset = SaladsDataset(dataset['target'], dataset['stochastic'])
+    cfg.max_seq_len = salads_dataset.sequence_length
     train_dataset, test_dataset = train_test_split(salads_dataset, train_size=cfg.train_percent, shuffle=True,
                                                    random_state=cfg.seed)
 

@@ -51,6 +51,7 @@ class Config:
     mode: str = None
     train_percent: float = None
     seed: int = None
+    max_seq_len: int = None
 
     def __post_init__(self):
         if self.mode == "uncond":

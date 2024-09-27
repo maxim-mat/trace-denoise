@@ -27,35 +27,9 @@ from denoisers.SimpleDenoiser import SimpleDenoiser
 from denoisers.UnetDenoiser import UnetDenoiser
 from utils import calculate_metrics
 
+from Config import Config
+
 warnings.filterwarnings("ignore")
-
-
-@dataclass
-class Config:
-    data_path: str = None
-    summary_path: str = None
-    device: str = None
-    num_epochs: int = None
-    learning_rate: float = None
-    num_timesteps: int = None
-    num_workers: int = None
-    test_every: int = None
-    denoiser_hidden: int = None
-    denoiser_layers: int = None
-    num_classes: int = None
-    batch_size: int = None
-    denoiser: str = None
-    eval_train: bool = None
-    predict_on: str = None
-    conditional_dropout: float = None
-    mode: str = None
-    train_percent: float = None
-    seed: int = None
-    max_seq_len: int = None
-
-    def __post_init__(self):
-        if self.mode == "uncond":
-            self.conditional_dropout = 1.0
 
 
 def parse_args():
@@ -281,6 +255,7 @@ def main():
     (train_losses, test_losses, test_dist, test_acc, test_precision, tests_recall, test_f1, test_auc, train_acc,
      train_recall, train_precision, train_f1, train_auc, train_dist) = \
         train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, cfg, summary, logger)
+
     px.line(train_losses).write_html(os.path.join(cfg.summary_path, "train_loss.html"))
     px.line(test_losses).write_html(os.path.join(cfg.summary_path, "test_losses.html"))
     px.line(test_dist).write_html(os.path.join(cfg.summary_path, "test_dist.html"))

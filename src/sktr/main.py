@@ -2277,5 +2277,5 @@ if __name__ == "__main__":
 
     di = activity_map_dict()
     df["concept:name"] = df["concept:name"].replace(di)
-    stochastic_acc, argmax_acc = compare_stochastic_vs_argmax_random_indices(df, softmax_lst, n_indices=4)
+    stochastic_acc, argmax_acc = compare_stochastic_vs_argmax_random_indices(df, softmax_lst, n_train_traces=20, n_indices=100)
     print(mean(stochastic_acc), mean(argmax_acc))

@@ -2245,6 +2245,46 @@ def select_random_indices_in_log_and_sftm_matrices_lst(log_df, sftm_mat_lst, n_i
     return pd.concat(filtered_trace_lst), filtered_sftm_mat_lst
 
 
+def clean_recovered_trace(recovered_trace: List[str], activity_names: dict):
+    clean_trace = [k for activity in recovered_trace for k, v in activity_names if k in activity]
+    return clean_trace
+
+
+def recover_single_trace(stochastic_trace_df: pd.DataFrame, model: PetriNet, non_sync_penalty: int,
+                         activity_names: dict):
+    df_stochastic = stochastic_trace_df[['concept:name', 'probs']]
+    df_stochastic = df_stochastic.reset_index(drop=True)
+    case_trace_stochastic_model = construct_trace_model(df_stochastic, non_sync_penalty)
+    stochastic_alignment = model.conformance_checking(case_trace_stochastic_model)
+    recovered_trace = [item.split(',')[1][1:-1] for item in stochastic_alignment[0] if item.split(',')[1][1:-1] != '>>']
+    cleaned_recovered_trace = clean_recovered_trace(recovered_trace, activity_names)
+    return cleaned_recovered_trace
+
+
+def run_sktr(df_train: pd.DataFrame, stochastic_traces: List[torch.Tensor], cost_function=None, n_train_traces=10,
+             n_indices=100, round_precision=2, random_trace_selection=True, random_seed=42, non_sync_penalty=1) \
+        -> List[List[int]]:
+    """
+    runs sktr based on df_train and returns recovered traces based from stochastic_traces
+
+    :param df_train: dataframe of deterministic train traces to build the process model
+    :param stochastic_traces: list of stochastic traces to recover
+    :param cost_function:
+    :param n_train_traces:
+    :param n_indices:
+    :param round_precision:
+    :param random_trace_selection:
+    :param random_seed:
+    :param non_sync_penalty:
+    :return: list of recovered traces
+    """
+    df_train = prepare_df_cols_for_discovery(df_train)
+    net, init_marking, final_marking = pm4py.discover_petri_net_inductive(df_train)
+    model = from_discovered_model_to_PetriNet(net, non_sync_move_penalty=non_sync_penalty)
+    # TODO finish this
+    recovered_traces = []
+
+
 class CPU_Unpickler(pickle.Unpickler):
     def find_class(self, module, name):
         if module == 'torch.storage' and name == '_load_from_bytes':
@@ -2253,7 +2293,7 @@ class CPU_Unpickler(pickle.Unpickler):
             return super().find_class(module, name)
 
 
-if __name__ == "__main__":
+def main():
     with open('../data/pickles/salads_softmax_lst.pickle', 'rb') as handle:
         softmax_lst = CPU_Unpickler(handle).load()
 
@@ -2277,5 +2317,37 @@ if __name__ == "__main__":
 
     di = activity_map_dict()
     df["concept:name"] = df["concept:name"].replace(di)
-    stochastic_acc, argmax_acc = compare_stochastic_vs_argmax_random_indices(df, softmax_lst, n_train_traces=20, n_indices=100)
+    stochastic_acc, argmax_acc = compare_stochastic_vs_argmax_random_indices(df, softmax_lst, n_train_traces=20,
+                                                                             n_indices=100)
     print(mean(stochastic_acc), mean(argmax_acc))
+
+
+def maint():
+    with open('../data/pickles/salads_softmax_lst.pickle', 'rb') as handle:
+        softmax_lst = CPU_Unpickler(handle).load()
+
+    with open('../data/pickles/salads_target_lst.pickle', 'rb') as handle:
+        target_lst = CPU_Unpickler(handle).load()
+
+    concant_tensor_lst = []
+    concat_idx_lst = []
+
+    for i, tensor in enumerate(target_lst):
+        tensor_lst = tensor.tolist()
+        tensor_lst = [str(elem) for elem in tensor_lst]
+        idx_lst = [str(i)] * len(tensor_lst)
+        concant_tensor_lst += tensor_lst
+        concat_idx_lst += idx_lst
+
+    df = pd.DataFrame(
+        {'concept:name': concant_tensor_lst,
+         'case:concept:name': concat_idx_lst
+         })
+
+    di = activity_map_dict()
+    df["concept:name"] = df["concept:name"].replace(di)
+    run_sktr(df, softmax_lst)
+
+
+if __name__ == "__main__":
+    main()

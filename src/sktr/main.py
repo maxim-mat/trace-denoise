@@ -19,6 +19,7 @@ from pm4py.algo.conformance.alignments.petri_net import algorithm as alignments
 import warnings
 from pm4py.objects.conversion.log import converter as log_converter
 import pulp
+from tqdm import tqdm
 from pulp import *
 import pickle
 import torch
@@ -2261,14 +2262,15 @@ def recover_single_trace(stochastic_trace_df: pd.DataFrame, model: PetriNet, non
     return cleaned_recovered_trace
 
 
-def run_sktr(df_train: pd.DataFrame, stochastic_traces: List[torch.Tensor], cost_function=None, n_train_traces=10,
-             n_indices=100, round_precision=2, random_trace_selection=True, random_seed=42, non_sync_penalty=1) \
-        -> List[List[int]]:
+def run_sktr(df_train: pd.DataFrame, stochastic_traces: List[torch.Tensor], activity_names: dict, cost_function=None,
+             n_train_traces=10, n_indices=100, round_precision=2, random_trace_selection=True, random_seed=42,
+             non_sync_penalty=1) -> List[List[int]]:
     """
     runs sktr based on df_train and returns recovered traces based from stochastic_traces
 
     :param df_train: dataframe of deterministic train traces to build the process model
     :param stochastic_traces: list of stochastic traces to recover
+    :param activity_names: dictionary that maps ids to activity names
     :param cost_function:
     :param n_train_traces:
     :param n_indices:
@@ -2281,8 +2283,13 @@ def run_sktr(df_train: pd.DataFrame, stochastic_traces: List[torch.Tensor], cost
     df_train = prepare_df_cols_for_discovery(df_train)
     net, init_marking, final_marking = pm4py.discover_petri_net_inductive(df_train)
     model = from_discovered_model_to_PetriNet(net, non_sync_move_penalty=non_sync_penalty)
-    # TODO finish this
-    recovered_traces = []
+    recovered_traces = [
+        recover_single_trace(
+            sfmx_mat_to_sk_trace(st_trace, 0, round_precision=round_precision),
+            model, non_sync_penalty, activity_names
+        ) for st_trace in tqdm(stochastic_traces)
+    ]
+    return recovered_traces
 
 
 class CPU_Unpickler(pickle.Unpickler):
@@ -2294,10 +2301,10 @@ class CPU_Unpickler(pickle.Unpickler):
 
 
 def main():
-    with open('../data/pickles/salads_softmax_lst.pickle', 'rb') as handle:
+    with open('../../data/pickles/salads_softmax_lst.pickle', 'rb') as handle:
         softmax_lst = CPU_Unpickler(handle).load()
 
-    with open('../data/pickles/salads_target_lst.pickle', 'rb') as handle:
+    with open('../../data/pickles/salads_target_lst.pickle', 'rb') as handle:
         target_lst = CPU_Unpickler(handle).load()
 
     concant_tensor_lst = []
@@ -2323,10 +2330,32 @@ def main():
 
 
 def maint():
-    with open('../data/pickles/salads_softmax_lst.pickle', 'rb') as handle:
+    names_dict = {
+        0: 'cut_tomato',
+        1: 'place_tomato_into_bowl',
+        2: 'cut_cheese',
+        3: 'place_cheese_into_bowl',
+        4: 'cut_lettuce',
+        5: 'place_lettuce_into_bowl',
+        6: 'add_salt',
+        7: 'add_vinegar',
+        8: 'add_oil',
+        9: 'add_pepper',
+        10: 'mix_dressing',
+        11: 'peel_cucumber',
+        12: 'cut_cucumber',
+        13: 'place_cucumber_into_bowl',
+        14: 'add_dressing',
+        15: 'mix_ingredients',
+        16: 'serve_salad_onto_plate',
+        17: 'action_start',
+        18: 'action_end',
+        19: 'EOT'
+    }
+    with open('../../data/pickles/salads_softmax_lst.pickle', 'rb') as handle:
         softmax_lst = CPU_Unpickler(handle).load()
 
-    with open('../data/pickles/salads_target_lst.pickle', 'rb') as handle:
+    with open('../../data/pickles/salads_target_lst.pickle', 'rb') as handle:
         target_lst = CPU_Unpickler(handle).load()
 
     concant_tensor_lst = []
@@ -2346,8 +2375,8 @@ def maint():
 
     di = activity_map_dict()
     df["concept:name"] = df["concept:name"].replace(di)
-    run_sktr(df, softmax_lst)
+    run_sktr(df, softmax_lst, activity_names=names_dict)
 
 
 if __name__ == "__main__":
-    main()
+    maint()

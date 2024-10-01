@@ -25,6 +25,19 @@ import pickle
 import torch
 import sympy
 from random import sample
+import pickle as pkl
+from src.denoisers.ConditionalUnetDenoiser import ConditionalUnetDenoiser
+from src.dataset.dataset import SaladsDataset
+import plotly.express as px
+import plotly.graph_objects as go
+from sklearn.model_selection import train_test_split
+from src.ddpm.ddpm_multinomial import Diffusion
+import torch
+import random
+from src.utils import calculate_metrics
+from src.Config import Config
+
+from src.dataset.dataset import SaladsDataset
 
 
 class Place:
@@ -2048,19 +2061,18 @@ def remove_loops_in_log_and_sftm_matrices_lst(log_df, sftm_mat_lst):
     return pd.concat(no_loops_trace_lst), no_loops_sftm_mat_lst
 
 
-def sfmx_mat_to_sk_trace(sftm_mat, case_num, round_precision=2):
+def sfmx_mat_to_sk_trace(sftm_mat, case_num, activity_names: dict, round_precision=2):
     if type(sftm_mat) is torch.Tensor:
         sftm_mat = sftm_mat.squeeze(0).cpu().numpy()
 
-    activities_arr = np.arange(19)
+    activities_arr = np.arange(sftm_mat.shape[0])
     df_prob_lst = []
     df_activities_lst = []
-    di = activity_map_dict()
 
     for i in range(sftm_mat.shape[1]):
         probs = np.round(sftm_mat[:, i], round_precision)
         activities = list(activities_arr[np.nonzero(probs)])
-        activities = [di[str(act)] for act in activities]
+        activities = [activity_names[act] for act in activities]
         df_prob_lst.append(list(probs[np.nonzero(probs)]))
         df_activities_lst.append(activities)
 
@@ -2285,10 +2297,11 @@ def run_sktr(df_train: pd.DataFrame, stochastic_traces: List[torch.Tensor], acti
     model = from_discovered_model_to_PetriNet(net, non_sync_move_penalty=non_sync_penalty)
     recovered_traces = [
         recover_single_trace(
-            sfmx_mat_to_sk_trace(st_trace, 0, round_precision=round_precision),
+            sfmx_mat_to_sk_trace(st_trace, 0, activity_names=activity_names, round_precision=round_precision),
             model, non_sync_penalty, activity_names
         ) for st_trace in tqdm(stochastic_traces)
     ]
+    print(recovered_traces)
     return recovered_traces
 
 
@@ -2301,10 +2314,10 @@ class CPU_Unpickler(pickle.Unpickler):
 
 
 def main():
-    with open('../../data/pickles/salads_softmax_lst.pickle', 'rb') as handle:
+    with open('../data/pickles/salads_softmax_lst.pickle', 'rb') as handle:
         softmax_lst = CPU_Unpickler(handle).load()
 
-    with open('../../data/pickles/salads_target_lst.pickle', 'rb') as handle:
+    with open('../data/pickles/salads_target_lst.pickle', 'rb') as handle:
         target_lst = CPU_Unpickler(handle).load()
 
     concant_tensor_lst = []
@@ -2327,6 +2340,50 @@ def main():
     stochastic_acc, argmax_acc = compare_stochastic_vs_argmax_random_indices(df, softmax_lst, n_train_traces=20,
                                                                              n_indices=100)
     print(mean(stochastic_acc), mean(argmax_acc))
+
+
+def convert_dataset_to_df(dataset: SaladsDataset, activity_names: dict):
+    deterministic, stochastic = torch.stack([x[0] for x in dataset], axis=0), torch.stack([x[1] for x in dataset], axis=0)
+    deterministic = torch.argmax(deterministic.permute(0, 2, 1), dim=1)
+    stochastic = stochastic.permute(0, 2, 1)
+
+    df_deterministic = pd.DataFrame(
+        {
+            'concept:name': [activity_names[i.item()] for trace in deterministic for i in trace],
+            'case:concept:name': [str(i) for i, trace in enumerate(deterministic) for _ in range(len(trace))]
+        }
+    )
+
+    stochastic_list = [x.unsqueeze(0) for x in stochastic]
+
+    return df_deterministic, stochastic_list
+
+
+def evaluate_models(data_path: str, denoiser_path: str, cfg_path: str, activity_names: dict):
+    with open(data_path, "rb") as f:
+        data = pkl.load(f)
+
+    with open(cfg_path, "r") as f:
+        cfg_json = json.load(f)
+        cfg = Config(**cfg_json)
+
+    dataset = SaladsDataset(data['target'], data['stochastic'])
+    denoiser = ConditionalUnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
+                                       max_input_dim=dataset.sequence_length).to('cuda').float()
+    denoiser.load_state_dict(torch.load(denoiser_path)['model_state'])
+    diffuser = Diffusion(noise_steps=cfg.num_timesteps)
+    train, test = train_test_split(dataset, train_size=cfg.train_percent, shuffle=True, random_state=cfg.seed)
+    gt = [torch.argmax(x[0], dim=1) for x in test]
+    (df_train, _), (_, stochastic_test) = convert_dataset_to_df(train, activity_names), convert_dataset_to_df(test, activity_names)
+    argmax_recovered = [torch.argmax(x[1], dim=1) for x in test]
+    argmax_metrics = calculate_metrics(gt, argmax_recovered)
+    print('calculated argmax')
+    diffusion_recovered = [torch.argmax(diffuser.sample(denoiser, 1, cfg.num_classes, denoiser.max_input_dim, x[1].permute(1, 0).unsqueeze(0).to('cuda').float(), cfg.predict_on), dim=1) for x in test]
+    diffusion_metrics = calculate_metrics(gt, [x[0].to('cpu') for x in diffusion_recovered])
+    print('calculated diffusion')
+    sktr_recovered = run_sktr(prepare_df_cols_for_discovery(df_train), stochastic_test, activity_names)
+    sktr_metrics = calculate_metrics(gt, sktr_recovered)
+    return argmax_metrics, diffusion_metrics, sktr_metrics
 
 
 def maint():
@@ -2352,30 +2409,14 @@ def maint():
         18: 'action_end',
         19: 'EOT'
     }
-    with open('../../data/pickles/salads_softmax_lst.pickle', 'rb') as handle:
-        softmax_lst = CPU_Unpickler(handle).load()
-
-    with open('../../data/pickles/salads_target_lst.pickle', 'rb') as handle:
-        target_lst = CPU_Unpickler(handle).load()
-
-    concant_tensor_lst = []
-    concat_idx_lst = []
-
-    for i, tensor in enumerate(target_lst):
-        tensor_lst = tensor.tolist()
-        tensor_lst = [str(elem) for elem in tensor_lst]
-        idx_lst = [str(i)] * len(tensor_lst)
-        concant_tensor_lst += tensor_lst
-        concat_idx_lst += idx_lst
-
-    df = pd.DataFrame(
-        {'concept:name': concant_tensor_lst,
-         'case:concept:name': concat_idx_lst
-         })
-
-    di = activity_map_dict()
-    df["concept:name"] = df["concept:name"].replace(di)
-    run_sktr(df, softmax_lst, activity_names=names_dict)
+    argmax_metrics, diffusion_metrics, sktr_metrics = evaluate_models(
+        "../data/pickles/50_salads_unified.pkl",
+        "../runs/unet_cond_ce_salads_42_50/best.ckpt",
+        "../runs/unet_cond_ce_salads_42_50/cfg.json",
+        names_dict
+    )
+    with open("salads_comparison.pkl", "wb") as f:
+        pkl.dump([argmax_metrics, diffusion_metrics, sktr_metrics], f)
 
 
 if __name__ == "__main__":

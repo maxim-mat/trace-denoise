@@ -17,5 +17,8 @@
   "eval_train": true,
   "mode": "cond",
   "predict_on": "original",
-  "seed": 42
+  "seed": 42,
+  "enable_gnn": true,
+  "enable_mutual_information": true,
+  "enable_process_model_covariance": true
 }

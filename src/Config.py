@@ -23,6 +23,11 @@ class Config:
     train_percent: float = None
     seed: int = None
     max_seq_len: int = None
+    enable_gnn: bool = None
+    enable_mutual_information: bool = None
+    enable_process_model_covariance: bool = None
+    activity_names: dict = None
+    process_discovery_method: str = None
 
     def __post_init__(self):
         if self.mode == "uncond":

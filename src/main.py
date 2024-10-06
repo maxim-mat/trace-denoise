@@ -9,6 +9,7 @@ from dataclasses import dataclass
 
 import numpy as np
 import plotly.express as px
+import pm4py
 import torch
 import torch.nn as nn
 from scipy.stats import wasserstein_distance
@@ -25,7 +26,7 @@ from denoisers.ConditionalUnetDenoiser import ConditionalUnetDenoiser
 from denoisers.ConvolutionDenoiser import ConvolutionDenoiser
 from denoisers.SimpleDenoiser import SimpleDenoiser
 from denoisers.UnetDenoiser import UnetDenoiser
-from utils import calculate_metrics
+from utils import calculate_metrics, convert_dataset_to_train_process_df, resolve_process_discovery_method
 
 from Config import Config
 
@@ -70,6 +71,13 @@ def save_ckpt(model, opt, epoch, cfg, train_loss, test_loss, best=False):
     torch.save(ckpt, os.path.join(cfg.summary_path, 'last.ckpt'))
     if best:
         torch.save(ckpt, os.path.join(cfg.summary_path, 'best.ckpt'))
+
+
+def discover_dk_process(dataset: SaladsDataset, cfg: Config):
+    df_train = convert_dataset_to_train_process_df(dataset, cfg)
+    process_discovery_method = resolve_process_discovery_method(cfg.process_discovery_method)
+    net, init_marking, final_marking = process_discovery_method(df_train)
+    return net, init_marking, final_marking
 
 
 def evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch):
@@ -220,6 +228,9 @@ def main():
     salads_dataset = SaladsDataset(dataset['target'], dataset['stochastic'])
     train_dataset, test_dataset = train_test_split(salads_dataset, train_size=cfg.train_percent, shuffle=True,
                                                    random_state=cfg.seed)
+
+    if cfg.enable_gnn:
+        dk_process_model, dk_init_marking, dk_final_marking = discover_dk_process(train_dataset, cfg)
 
     train_loader = DataLoader(
         train_dataset,

@@ -2295,11 +2295,14 @@ def run_sktr(df_train: pd.DataFrame, stochastic_traces: List[torch.Tensor], acti
     df_train = prepare_df_cols_for_discovery(df_train)
     net, init_marking, final_marking = pm4py.discover_petri_net_inductive(df_train)
     model = from_discovered_model_to_PetriNet(net, non_sync_move_penalty=non_sync_penalty)
+    df_random_indices, stmx_lst_random_indices = select_random_indices_in_log_and_sftm_matrices_lst(df_train,
+                                                                                                    stochastic_traces,
+                                                                                                    n_indices)
     recovered_traces = [
         recover_single_trace(
-            sfmx_mat_to_sk_trace(st_trace, 0, activity_names=activity_names, round_precision=round_precision),
+            sfmx_mat_to_sk_trace(sk_trace, 0, activity_names=activity_names, round_precision=round_precision),
             model, non_sync_penalty, activity_names
-        ) for st_trace in tqdm(stochastic_traces)
+        ) for sk_trace in tqdm(stochastic_traces)
     ]
     print(recovered_traces)
     return recovered_traces
@@ -2343,7 +2346,8 @@ def main():
 
 
 def convert_dataset_to_df(dataset: SaladsDataset, activity_names: dict):
-    deterministic, stochastic = torch.stack([x[0] for x in dataset], axis=0), torch.stack([x[1] for x in dataset], axis=0)
+    deterministic, stochastic = (torch.stack([x[0] for x in dataset], axis=0),
+                                 torch.stack([x[1] for x in dataset], axis=0))
     deterministic = torch.argmax(deterministic.permute(0, 2, 1), dim=1)
     stochastic = stochastic.permute(0, 2, 1)
 
@@ -2374,14 +2378,17 @@ def evaluate_models(data_path: str, denoiser_path: str, cfg_path: str, activity_
     diffuser = Diffusion(noise_steps=cfg.num_timesteps)
     train, test = train_test_split(dataset, train_size=cfg.train_percent, shuffle=True, random_state=cfg.seed)
     gt = [torch.argmax(x[0], dim=1) for x in test]
-    (df_train, _), (_, stochastic_test) = convert_dataset_to_df(train, activity_names), convert_dataset_to_df(test, activity_names)
-    argmax_recovered = [torch.argmax(x[1], dim=1) for x in test]
-    argmax_metrics = calculate_metrics(gt, argmax_recovered)
-    print('calculated argmax')
-    diffusion_recovered = [torch.argmax(diffuser.sample(denoiser, 1, cfg.num_classes, denoiser.max_input_dim, x[1].permute(1, 0).unsqueeze(0).to('cuda').float(), cfg.predict_on), dim=1) for x in test]
-    diffusion_metrics = calculate_metrics(gt, [x[0].to('cpu') for x in diffusion_recovered])
-    print('calculated diffusion')
-    sktr_recovered = run_sktr(prepare_df_cols_for_discovery(df_train), stochastic_test, activity_names)
+    (df_train, _), (_, stochastic_test) = convert_dataset_to_df(train, activity_names), convert_dataset_to_df(test,
+                                                                                                              activity_names)
+    # argmax_recovered = [torch.argmax(x[1], dim=1) for x in test]
+    # argmax_metrics = calculate_metrics(gt, argmax_recovered)
+    # print('calculated argmax')
+    # diffusion_recovered = [torch.argmax(diffuser.sample(denoiser, 1, cfg.num_classes, denoiser.max_input_dim,
+    #                                                     x[1].permute(1, 0).unsqueeze(0).to('cuda').float(),
+    #                                                     cfg.predict_on), dim=1) for x in test]
+    # diffusion_metrics = calculate_metrics(gt, [x[0].to('cpu') for x in diffusion_recovered])
+    # print('calculated diffusion')
+    sktr_recovered = run_sktr(df_train, stochastic_test, activity_names)
     sktr_metrics = calculate_metrics(gt, sktr_recovered)
     return argmax_metrics, diffusion_metrics, sktr_metrics
 
@@ -2410,9 +2417,9 @@ def maint():
         19: 'EOT'
     }
     argmax_metrics, diffusion_metrics, sktr_metrics = evaluate_models(
-        "../data/pickles/50_salads_unified.pkl",
-        "../runs/unet_cond_ce_salads_42_50/best.ckpt",
-        "../runs/unet_cond_ce_salads_42_50/cfg.json",
+        "../../data/pickles/50_salads_unified.pkl",
+        "../../runs/unet_cond_ce_salads_42_50/best.ckpt",
+        "../../runs/unet_cond_ce_salads_42_50/cfg.json",
         names_dict
     )
     with open("salads_comparison.pkl", "wb") as f:

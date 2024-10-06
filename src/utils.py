@@ -1,6 +1,13 @@
+from typing import Callable
+
+import pandas as pd
+import pm4py
 import torch
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 from numpy import mean
+
+from src.Config import Config
+from src.dataset.dataset import SaladsDataset
 
 
 def denoise_single(diffuser, denoiser, x_t, t, cfg):
@@ -52,3 +59,42 @@ def calculate_metrics(y_true, y_pred):
         f1s.append(f1_score(yti, ypi, average='macro', zero_division=0))
         # aucs.append(roc_auc_score(yti, ypi, average='macro', multi_class='ovr'))
     return mean(accs), mean(recalls), mean(precisions), mean(f1s)
+
+
+def convert_dataset_to_df(dataset: SaladsDataset, activity_names: dict):
+    deterministic, stochastic = torch.stack([x[0] for x in dataset], axis=0), torch.stack([x[1] for x in dataset],
+                                                                                          axis=0)
+    deterministic = torch.argmax(deterministic.permute(0, 2, 1), dim=1)
+    stochastic = stochastic.permute(0, 2, 1)
+
+    df_deterministic = pd.DataFrame(
+        {
+            'concept:name': [activity_names[i.item()] for trace in deterministic for i in trace],
+            'case:concept:name': [str(i) for i, trace in enumerate(deterministic) for _ in range(len(trace))]
+        }
+    )
+
+    stochastic_list = [x.unsqueeze(0) for x in stochastic]
+
+    return df_deterministic, stochastic_list
+
+
+def prepare_df_cols_for_discovery(df):
+    df_copy = df.copy()
+    df_copy.loc[:, 'order'] = df_copy.groupby('case:concept:name').cumcount()
+    df_copy.loc[:, 'time:timestamp'] = pd.to_datetime(df_copy['order'])
+
+    return df_copy
+
+
+def convert_dataset_to_train_process_df(dataset: SaladsDataset, cfg: Config):
+    (dk_process_df, _), (_, _) = convert_dataset_to_df(dataset, cfg.activity_names)
+    return prepare_df_cols_for_discovery(dk_process_df)
+
+
+def resolve_process_discovery_method(method_name: str) -> Callable:
+    match method_name:
+        case "inductive":
+            return pm4py.discover_petri_net_inductive
+        case _:
+            raise AttributeError(f"Unsupported discovery method: {method_name}")

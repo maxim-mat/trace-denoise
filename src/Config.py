@@ -26,9 +26,11 @@ class Config:
     enable_gnn: bool = None
     enable_mutual_information: bool = None
     enable_process_model_covariance: bool = None
-    activity_names: dict = None
+    activity_names: dict[int, str] = None
     process_discovery_method: str = None
 
     def __post_init__(self):
         if self.mode == "uncond":
             self.conditional_dropout = 1.0
+        if self.activity_names is not None:
+            self.activity_names = {int(k): v for k, v in self.activity_names.items()}

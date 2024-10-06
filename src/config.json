@@ -1,6 +1,6 @@
 {
-  "data_path": "../data/pickles/breakfast_unified.pkl",
-  "summary_path": "../runs/unet_cond_ce_breakfast_42_75",
+  "data_path": "../data/pickles/50_salads_unified.pkl",
+  "summary_path": "debug",
   "device": "cuda",
   "num_epochs": 3000,
   "learning_rate": 5e-6,
@@ -10,7 +10,7 @@
   "test_every": 200,
   "denoiser_hidden": 256,
   "denoiser_layers": 2,
-  "num_classes": 49,
+  "num_classes": 20,
   "batch_size": 5,
   "conditional_dropout": 0.1,
   "denoiser": "unet_cond",
@@ -20,5 +20,28 @@
   "seed": 42,
   "enable_gnn": true,
   "enable_mutual_information": true,
-  "enable_process_model_covariance": true
+  "enable_process_model_covariance": true,
+  "activity_names": {
+    "0": "cut_tomato",
+    "1": "place_tomato_into_bowl",
+    "2": "cut_cheese",
+    "3": "place_cheese_into_bowl",
+    "4": "cut_lettuce",
+    "5": "place_lettuce_into_bowl",
+    "6": "add_salt",
+    "7": "add_vinegar",
+    "8": "add_oil",
+    "9": "add_pepper",
+    "10": "mix_dressing",
+    "11": "peel_cucumber",
+    "12": "cut_cucumber",
+    "13": "place_cucumber_into_bowl",
+    "14": "add_dressing",
+    "15": "mix_ingredients",
+    "16": "serve_salad_onto_plate",
+    "17": "action_start",
+    "18": "action_end",
+    "19": "EOT"
+  },
+  "process_discovery_method": "inductive"
 }

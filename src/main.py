@@ -76,8 +76,7 @@ def save_ckpt(model, opt, epoch, cfg, train_loss, test_loss, best=False):
 def discover_dk_process(dataset: SaladsDataset, cfg: Config):
     df_train = convert_dataset_to_train_process_df(dataset, cfg)
     process_discovery_method = resolve_process_discovery_method(cfg.process_discovery_method)
-    net, init_marking, final_marking = process_discovery_method(df_train)
-    return net, init_marking, final_marking
+    return pm4py.convert_petri_net_to_networkx(*process_discovery_method(df_train))
 
 
 def evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch):

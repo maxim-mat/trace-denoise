@@ -88,7 +88,7 @@ def prepare_df_cols_for_discovery(df):
 
 
 def convert_dataset_to_train_process_df(dataset: SaladsDataset, cfg: Config):
-    (dk_process_df, _), (_, _) = convert_dataset_to_df(dataset, cfg.activity_names)
+    dk_process_df, _ = convert_dataset_to_df(dataset, cfg.activity_names)
     return prepare_df_cols_for_discovery(dk_process_df)
 
 

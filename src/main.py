@@ -6,18 +6,22 @@ import pickle as pkl
 import random
 import warnings
 from dataclasses import dataclass
-
+from typing import Tuple
+import networkx as nx
 import numpy as np
 import plotly.express as px
 import pm4py
 import torch
 import torch.nn as nn
+import torch_geometric.data
 from scipy.stats import wasserstein_distance
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import train_test_split
+from sklearn.preprocessing import OneHotEncoder
 from tensorboardX import SummaryWriter
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
+from torch_geometric.utils import from_networkx
 from tqdm import tqdm
 
 from dataset.dataset import SaladsDataset
@@ -73,10 +77,31 @@ def save_ckpt(model, opt, epoch, cfg, train_loss, test_loss, best=False):
         torch.save(ckpt, os.path.join(cfg.summary_path, 'best.ckpt'))
 
 
-def discover_dk_process(dataset: SaladsDataset, cfg: Config):
+def discover_dk_process(dataset: SaladsDataset, cfg: Config) -> tuple[pm4py.PetriNet, pm4py.Marking, pm4py.Marking]:
     df_train = convert_dataset_to_train_process_df(dataset, cfg)
     process_discovery_method = resolve_process_discovery_method(cfg.process_discovery_method)
-    return pm4py.convert_petri_net_to_networkx(*process_discovery_method(df_train))
+    return process_discovery_method(df_train)
+
+
+def add_features_to_graph(graph: nx.Graph) -> None:
+    """
+    modifies nodes in place with features under the attribute 'x'
+    :param graph: graph to modify
+    :return:
+    """
+    node_names = np.array([n[0] for n in graph.nodes(data=True)]).reshape(-1, 1)
+    encoder = OneHotEncoder(sparse_output=False)
+    nodes_one_hot = encoder.fit_transform(node_names)
+    for node in graph.nodes(data=True):
+        node[1]['x'] = 1  # TODO create actual node features
+
+
+def prepare_process_model_for_gnn(process_model: pm4py.PetriNet, init_marking: pm4py.Marking,
+                                  final_marking: pm4py.Marking) -> torch_geometric.data.Data:
+    model_nx = pm4py.convert_petri_net_to_networkx(process_model, init_marking, final_marking)
+    add_features_to_graph(model_nx)
+    data = from_networkx(model_nx)
+    return data
 
 
 def evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch):

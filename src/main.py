@@ -90,10 +90,12 @@ def add_features_to_graph(graph: nx.Graph) -> None:
     :return:
     """
     node_names = np.array([n[0] for n in graph.nodes(data=True)]).reshape(-1, 1)
-    encoder = OneHotEncoder(sparse_output=False)
-    nodes_one_hot = encoder.fit_transform(node_names)
+    one_hot_encoder = OneHotEncoder(sparse_output=False)
+    one_hot_encoder.fit(node_names)
     for node in graph.nodes(data=True):
-        node[1]['x'] = 1  # TODO create actual node features
+        node_name, node_attributes = node
+        node_one_hot = one_hot_encoder.transform(np.array(node_name).reshape(-1, 1))
+        node[1]['x'] = node_features  # TODO create actual node features
 
 
 def prepare_process_model_for_gnn(process_model: pm4py.PetriNet, init_marking: pm4py.Marking,
@@ -282,7 +284,8 @@ def main():
         denoiser = SimpleDenoiser(input_dim=cfg.num_classes, hidden_dim=cfg.denoiser_hidden, output_dim=cfg.num_classes,
                                   num_layers=cfg.denoiser_layers, time_dim=128, device=cfg.device).to(
             cfg.device).float()
-    denoiser = nn.DataParallel(denoiser, device_ids=[0, 1])
+    if cfg.parallelize:
+        denoiser = nn.DataParallel(denoiser, device_ids=[0, 1])
     optimizer = AdamW(denoiser.parameters(), cfg.learning_rate)
     criterion = nn.MSELoss() if cfg.predict_on == 'noise' else nn.CrossEntropyLoss()
     summary = SummaryWriter(cfg.summary_path)

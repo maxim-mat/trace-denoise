@@ -6,6 +6,7 @@ class Config:
     data_path: str = None
     summary_path: str = None
     device: str = None
+    parallelize: bool = None
     num_epochs: int = None
     learning_rate: float = None
     num_timesteps: int = None

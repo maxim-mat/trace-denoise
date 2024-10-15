@@ -1,5 +1,6 @@
 from typing import Callable
 
+import numpy as np
 import pandas as pd
 import pm4py
 import torch
@@ -98,3 +99,22 @@ def resolve_process_discovery_method(method_name: str) -> Callable:
             return pm4py.discover_petri_net_inductive
         case _:
             raise AttributeError(f"Unsupported discovery method: {method_name}")
+
+
+def subsample_time_series(trace_data: dict, num_indexes: int, axis: int = 0):
+    """
+    reduces trace lengths to num_indexes
+    :param trace_data: original dk and sk traces
+    :param num_indexes: length of new, under-sampled, sequences
+    :param axis: axis along which to sample
+    :return: reduced length df and sk traces and respective sampled indexes
+    """
+    dk_sample, sk_sample, sample_indexes = [], [], []
+    for dk_trace, sk_trace in zip(trace_data['target'], trace_data['stochastic']):
+        if dk_trace.shape[0] != sk_trace.shape[0]:
+            raise ValueError(f"trace lengths: {dk_trace.shape[0]} (dk), {sk_trace.shape[0]} (sk) missmatch")
+        random_indexes = sorted(np.random.choice(dk_trace.shape[axis], min(num_indexes, len(dk_trace)), replace=False))
+        dk_sample.append(dk_trace[random_indexes])
+        sk_sample.append(sk_trace[random_indexes])
+        sample_indexes.append(random_indexes)
+    return {'target': dk_sample, 'stochastic': sk_sample}, sample_indexes

@@ -34,7 +34,7 @@ from sklearn.model_selection import train_test_split
 from src.ddpm.ddpm_multinomial import Diffusion
 import torch
 import random
-from src.utils import calculate_metrics
+from src.utils import calculate_metrics, subsample_time_series
 from src.Config import Config
 
 from src.dataset.dataset import SaladsDataset
@@ -2295,9 +2295,9 @@ def run_sktr(df_train: pd.DataFrame, stochastic_traces: List[torch.Tensor], acti
     df_train = prepare_df_cols_for_discovery(df_train)
     net, init_marking, final_marking = pm4py.discover_petri_net_inductive(df_train)
     model = from_discovered_model_to_PetriNet(net, non_sync_move_penalty=non_sync_penalty)
-    df_random_indices, stmx_lst_random_indices = select_random_indices_in_log_and_sftm_matrices_lst(df_train,
-                                                                                                    stochastic_traces,
-                                                                                                    n_indices)
+    # df_random_indices, stmx_lst_random_indices = select_random_indices_in_log_and_sftm_matrices_lst(df_train,
+    #                                                                                                 stochastic_traces,
+    #                                                                                                 n_indices)
     recovered_traces = [
         recover_single_trace(
             sfmx_mat_to_sk_trace(sk_trace, 0, activity_names=activity_names, round_precision=round_precision),
@@ -2371,6 +2371,7 @@ def evaluate_models(data_path: str, denoiser_path: str, cfg_path: str, activity_
         cfg_json = json.load(f)
         cfg = Config(**cfg_json)
 
+    data, indexes = subsample_time_series(data, 200)
     dataset = SaladsDataset(data['target'], data['stochastic'])
     denoiser = ConditionalUnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
                                        max_input_dim=dataset.sequence_length).to('cuda').float()
@@ -2417,9 +2418,9 @@ def maint():
         19: 'EOT'
     }
     argmax_metrics, diffusion_metrics, sktr_metrics = evaluate_models(
-        "../../data/pickles/50_salads_unified.pkl",
-        "../../runs/unet_cond_ce_salads_42_50/best.ckpt",
-        "../../runs/unet_cond_ce_salads_42_50/cfg.json",
+        "../data/pickles/50_salads_unified.pkl",
+        "../runs/unet_cond_ce_salads_42_50/best.ckpt",
+        "../runs/unet_cond_ce_salads_42_50/cfg.json",
         names_dict
     )
     with open("salads_comparison.pkl", "wb") as f:

@@ -1,6 +1,6 @@
 {
-  "data_path": "../data/pickles/breakfast_500_sample.pkl",
-  "summary_path": "../runs/breakfast_500_sample",
+  "data_path": "../data/pickles/50_salads_500_sample.pkl",
+  "summary_path": "../runs/sktr_50_salads",
   "device": "cuda",
   "parallelize": false,
   "num_epochs": 3000,
@@ -44,5 +44,6 @@
     "18": "action_end",
     "19": "EOT"
   },
-  "process_discovery_method": "inductive"
+  "process_discovery_method": "inductive",
+  "round_precision": 2
 }

@@ -29,6 +29,7 @@ class Config:
     enable_process_model_covariance: bool = None
     activity_names: dict[int, str] = None
     process_discovery_method: str = None
+    round_precision: int = 2
 
     def __post_init__(self):
         if self.mode == "uncond":

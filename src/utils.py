@@ -1,14 +1,51 @@
+import argparse
+import json
+import logging
+import multiprocessing
+import os
 from typing import Callable
-
+from functools import partial
 import numpy as np
 import pandas as pd
 import pm4py
 import torch
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score
 from numpy import mean
+from tqdm import tqdm
+import pickle as pkl
 
+import sktr
 from src.Config import Config
 from src.dataset.dataset import SaladsDataset
+from sktr.sktr import convert_dataset_to_df, sfmx_mat_to_sk_trace, from_discovered_model_to_PetriNet, \
+    recover_single_trace
+
+
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--cfg_path', default=r"config.json", help="configuration path")
+    parser.add_argument('--save_path', default=None, help="path for checkpoints and results")
+    parser.add_argument('--resume', default=0, type=int, help="resume previous run")
+    args = parser.parse_args()
+    return args
+
+
+def initialize():
+    args = parse_args()
+    with open(args.cfg_path, "r") as f:
+        cfg_json = json.load(f)
+        cfg = Config(**cfg_json)
+    with open(cfg.data_path, "rb") as f:
+        dataset = pkl.load(f)
+    if args.save_path is None:
+        args.save_path = cfg.summary_path
+    for path in (args.save_path, cfg.summary_path):
+        os.makedirs(path, exist_ok=True)
+    with open(os.path.join(cfg.summary_path, "cfg.json"), "w") as f:
+        json.dump(cfg_json, f)
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    return args, cfg, dataset, logger
 
 
 def denoise_single(diffuser, denoiser, x_t, t, cfg):
@@ -62,24 +99,6 @@ def calculate_metrics(y_true, y_pred):
     return mean(accs), mean(recalls), mean(precisions), mean(f1s)
 
 
-def convert_dataset_to_df(dataset: SaladsDataset, activity_names: dict):
-    deterministic, stochastic = torch.stack([x[0] for x in dataset], axis=0), torch.stack([x[1] for x in dataset],
-                                                                                          axis=0)
-    deterministic = torch.argmax(deterministic.permute(0, 2, 1), dim=1)
-    stochastic = stochastic.permute(0, 2, 1)
-
-    df_deterministic = pd.DataFrame(
-        {
-            'concept:name': [activity_names[i.item()] for trace in deterministic for i in trace],
-            'case:concept:name': [str(i) for i, trace in enumerate(deterministic) for _ in range(len(trace))]
-        }
-    )
-
-    stochastic_list = [x.unsqueeze(0) for x in stochastic]
-
-    return df_deterministic, stochastic_list
-
-
 def prepare_df_cols_for_discovery(df):
     df_copy = df.copy()
     df_copy.loc[:, 'order'] = df_copy.groupby('case:concept:name').cumcount()
@@ -91,6 +110,11 @@ def prepare_df_cols_for_discovery(df):
 def convert_dataset_to_train_process_df(dataset: SaladsDataset, cfg: Config):
     dk_process_df, _ = convert_dataset_to_df(dataset, cfg.activity_names)
     return prepare_df_cols_for_discovery(dk_process_df)
+
+
+def convert_dataset_to_stochastic_traces(dataset: SaladsDataset, cfg: Config):
+    _, stochastic_list = convert_dataset_to_df(dataset, cfg.activity_names)
+    return stochastic_list
 
 
 def resolve_process_discovery_method(method_name: str) -> Callable:
@@ -118,3 +142,40 @@ def subsample_time_series(trace_data: dict, num_indexes: int, axis: int = 0):
         sk_sample.append(sk_trace[random_indexes])
         sample_indexes.append(random_indexes)
     return {'target': dk_sample, 'stochastic': sk_sample}, sample_indexes
+
+
+def train_sktr(dataset: SaladsDataset, cfg: Config) -> sktr.sktr.PetriNet:
+    """
+    run process discovery on the train dataset
+    :param dataset: train dataset
+    :param cfg:
+    :return: process model petri net
+    """
+    df_train = convert_dataset_to_train_process_df(dataset, cfg)
+    net, init_marking, final_marking = pm4py.discover_petri_net_inductive(df_train)
+    model = from_discovered_model_to_PetriNet(net, non_sync_move_penalty=1)
+    return model
+
+
+def process_sk_trace(sk_trace: pd.DataFrame, activity_names, round_precision, model, non_sync_penalty):
+    print("started processing trace")
+    recovered_trace = recover_single_trace(
+        sfmx_mat_to_sk_trace(sk_trace, 0, activity_names=activity_names, round_precision=round_precision),
+        model, non_sync_penalty, activity_names
+    )
+    print("ended processing trace")
+    return recovered_trace
+
+
+def evaluate_sktr_on_dataset(dataset: SaladsDataset, model: sktr.sktr.PetriNet, cfg: Config):
+    stochastic_traces_matrices = convert_dataset_to_stochastic_traces(dataset, cfg)
+    args_list = [
+        (sk_trace, cfg.activity_names, cfg.round_precision, model, 1)
+        for sk_trace in stochastic_traces_matrices
+    ]
+    with multiprocessing.Pool(processes=min(1, os.cpu_count() - 4)) as pool:
+        recovered_traces = list(
+            pool.starmap(process_sk_trace, args_list)
+        )
+
+    return recovered_traces

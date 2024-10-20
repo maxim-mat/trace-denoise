@@ -2258,7 +2258,7 @@ def select_random_indices_in_log_and_sftm_matrices_lst(log_df, sftm_mat_lst, n_i
 
 
 def clean_recovered_trace(recovered_trace: List[str], activity_names: dict):
-    clean_trace = [k for activity in recovered_trace for k, v in activity_names if k in activity]
+    clean_trace = [k for activity in recovered_trace for k, v in activity_names.items() if str(v) in activity]
     return clean_trace
 
 
@@ -2370,12 +2370,12 @@ def evaluate_models(data_path: str, denoiser_path: str, cfg_path: str, activity_
         cfg_json = json.load(f)
         cfg = Config(**cfg_json)
 
-    data, indexes = subsample_time_series(data, 200)
+    # data, indexes = subsample_time_series(data, 200)
     dataset = SaladsDataset(data['target'], data['stochastic'])
-    denoiser = ConditionalUnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
-                                       max_input_dim=dataset.sequence_length).to('cuda').float()
-    denoiser.load_state_dict(torch.load(denoiser_path)['model_state'])
-    diffuser = Diffusion(noise_steps=cfg.num_timesteps)
+    # denoiser = ConditionalUnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
+    #                                    max_input_dim=dataset.sequence_length).to('cuda').float()
+    # denoiser.load_state_dict(torch.load(denoiser_path)['model_state'])
+    # diffuser = Diffusion(noise_steps=cfg.num_timesteps)
     train, test = train_test_split(dataset, train_size=cfg.train_percent, shuffle=True, random_state=cfg.seed)
     gt = [torch.argmax(x[0], dim=1) for x in test]
     (df_train, _), (_, stochastic_test) = convert_dataset_to_df(train, activity_names), convert_dataset_to_df(test,
@@ -2417,7 +2417,7 @@ def maint():
         19: 'EOT'
     }
     argmax_metrics, diffusion_metrics, sktr_metrics = evaluate_models(
-        "../data/pickles/50_salads_unified.pkl",
+        "../data/pickles/50_salads_24_sample.pkl",
         "../runs/unet_cond_ce_salads_42_50/best.ckpt",
         "../runs/unet_cond_ce_salads_42_50/cfg.json",
         names_dict

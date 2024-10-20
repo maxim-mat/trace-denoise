@@ -50,12 +50,6 @@ def save_ckpt(model, opt, epoch, cfg, train_loss, test_loss, best=False):
         torch.save(ckpt, os.path.join(cfg.summary_path, 'best.ckpt'))
 
 
-def discover_dk_process(dataset: SaladsDataset, cfg: Config) -> tuple[pm4py.PetriNet, pm4py.Marking, pm4py.Marking]:
-    df_train = convert_dataset_to_train_process_df(dataset, cfg)
-    process_discovery_method = resolve_process_discovery_method(cfg.process_discovery_method)
-    return process_discovery_method(df_train)
-
-
 def add_features_to_graph(graph: nx.Graph) -> None:
     """
     modifies nodes in place with features under the attribute 'x'

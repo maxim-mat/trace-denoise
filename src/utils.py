@@ -157,6 +157,12 @@ def train_sktr(dataset: SaladsDataset, cfg: Config) -> sktr.sktr.PetriNet:
     return model
 
 
+def discover_dk_process(dataset: SaladsDataset, cfg: Config) -> tuple[pm4py.PetriNet, pm4py.Marking, pm4py.Marking]:
+    df_train = convert_dataset_to_train_process_df(dataset, cfg)
+    process_discovery_method = resolve_process_discovery_method(cfg.process_discovery_method)
+    return process_discovery_method(df_train)
+
+
 def process_sk_trace(sk_trace: pd.DataFrame, activity_names, round_precision, model, non_sync_penalty):
     print("started processing trace")
     recovered_trace = recover_single_trace(

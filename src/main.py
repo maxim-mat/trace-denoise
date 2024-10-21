@@ -30,7 +30,7 @@ from denoisers.ConditionalUnetDenoiser import ConditionalUnetDenoiser
 from denoisers.ConvolutionDenoiser import ConvolutionDenoiser
 from denoisers.SimpleDenoiser import SimpleDenoiser
 from denoisers.UnetDenoiser import UnetDenoiser
-from utils import initialize, calculate_metrics, convert_dataset_to_train_process_df, resolve_process_discovery_method
+from utils import initialize, calculate_metrics, discover_dk_process
 
 from Config import Config
 

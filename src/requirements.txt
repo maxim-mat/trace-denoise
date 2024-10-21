@@ -1,0 +1,10 @@
+numpy
+pandas
+torch
+torch-geometric
+plotly
+pm4py
+scikit-learn
+tqdm
+scipy
+networkx

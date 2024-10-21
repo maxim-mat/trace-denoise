@@ -1,0 +1,25 @@
+name: everything
+channels:
+  - defaults
+dependencies:
+  - python=3.11
+  - dash
+  - django
+  - flask
+  - geopandas
+  - jupyter
+  - matplotlib
+  - networkx
+  - numba
+  - numpy
+  - pandas
+  - plotly
+  - scikit-learn
+  - seaborn
+  - shapely
+  - statsmodels
+  - tqdm
+  - tensorboardx
+  - sqlalchemy
+  - python-kaleido
+  - tensorboard

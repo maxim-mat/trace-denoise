@@ -18,6 +18,7 @@ from scipy.stats import wasserstein_distance
 from sklearn.metrics import roc_auc_score
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder
+from sklearn.preprocessing import OneHotEncoder
 from tensorboardX import SummaryWriter
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
@@ -31,8 +32,6 @@ from denoisers.ConvolutionDenoiser import ConvolutionDenoiser
 from denoisers.SimpleDenoiser import SimpleDenoiser
 from denoisers.UnetDenoiser import UnetDenoiser
 from utils import initialize, calculate_metrics, discover_dk_process
-
-from Config import Config
 
 warnings.filterwarnings("ignore")
 
@@ -48,29 +47,6 @@ def save_ckpt(model, opt, epoch, cfg, train_loss, test_loss, best=False):
     torch.save(ckpt, os.path.join(cfg.summary_path, 'last.ckpt'))
     if best:
         torch.save(ckpt, os.path.join(cfg.summary_path, 'best.ckpt'))
-
-
-def add_features_to_graph(graph: nx.Graph) -> None:
-    """
-    modifies nodes in place with features under the attribute 'x'
-    :param graph: graph to modify
-    :return:
-    """
-    node_names = np.array([n[0] for n in graph.nodes(data=True)]).reshape(-1, 1)
-    one_hot_encoder = OneHotEncoder(sparse_output=False)
-    one_hot_encoder.fit(node_names)
-    for node in graph.nodes(data=True):
-        node_name, node_attributes = node
-        node_one_hot = one_hot_encoder.transform(np.array(node_name).reshape(-1, 1))
-        node[1]['x'] = node_one_hot  # TODO create actual node features
-
-
-def prepare_process_model_for_gnn(process_model: pm4py.PetriNet, init_marking: pm4py.Marking,
-                                  final_marking: pm4py.Marking) -> torch_geometric.data.Data:
-    model_nx = pm4py.convert_petri_net_to_networkx(process_model, init_marking, final_marking)
-    add_features_to_graph(model_nx)
-    data = from_networkx(model_nx)
-    return data
 
 
 def evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch):

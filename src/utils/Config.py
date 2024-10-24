@@ -25,6 +25,14 @@ class Config:
     seed: int = None
     max_seq_len: int = None
     enable_gnn: bool = None
+    n2v_dimensions: int = None
+    n2v_walk_length: int = None
+    n2v_num_walks: int = None
+    n2v_p: int = None
+    n2v_q: int = None
+    n2v_window: int = None
+    n2v_min_count: int = None
+    n2v_batch_words: int = None
     enable_mutual_information: bool = None
     enable_process_model_covariance: bool = None
     activity_names: dict[int, str] = None

@@ -34,7 +34,7 @@ from sklearn.model_selection import train_test_split
 from src.ddpm.ddpm_multinomial import Diffusion
 import torch
 import random
-from src.Config import Config
+from src.utils.Config import Config
 
 from src.dataset.dataset import SaladsDataset
 

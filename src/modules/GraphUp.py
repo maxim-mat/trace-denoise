@@ -6,7 +6,7 @@ from src.modules.DoubleConv import DoubleConv
 from src.modules.GraphEncoder import GraphEncoder
 
 
-class Up(nn.Module):
+class GraphUp(nn.Module):
     def __init__(self, in_channels, out_channels, graph_data: torch_geometric.data.Data, node_embed_dim,
                  graph_hidden_dim, emb_dim=256):
         super().__init__()

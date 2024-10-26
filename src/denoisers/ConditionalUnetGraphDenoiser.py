@@ -4,7 +4,8 @@ from src.modules.DoubleConv import DoubleConv
 from src.modules.Up import Up
 from src.modules.Down import Down
 from src.modules.SelfAttention import SelfAttention
-from src.modules.GraphEncoder import GraphEncoder
+from src.modules.GraphUp import GraphUp
+from src.modules.GraphDown import GraphDown
 
 
 class ConditionalUnetGraphDenoiser(nn.Module):

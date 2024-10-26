@@ -31,7 +31,8 @@ from denoisers.ConditionalUnetDenoiser import ConditionalUnetDenoiser
 from denoisers.ConvolutionDenoiser import ConvolutionDenoiser
 from denoisers.SimpleDenoiser import SimpleDenoiser
 from denoisers.UnetDenoiser import UnetDenoiser
-from utils import initialize, calculate_metrics, discover_dk_process
+from utils.initialization import initialize
+from utils import calculate_metrics
 
 warnings.filterwarnings("ignore")
 

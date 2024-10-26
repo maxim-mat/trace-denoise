@@ -1,6 +1,7 @@
 from typing import Iterable
 
 import networkx as nx
+import torch
 from node2vec import Node2Vec
 from sklearn.preprocessing import OneHotEncoder
 import numpy as np
@@ -29,9 +30,14 @@ def get_onehot_features(graph: nx.Graph) -> Iterable:
     return one_hot_encoder.fit_transform(node_names)
 
 
-def get_feature_collections(graph: nx.Graph, cfg: Config) -> Iterable[Iterable]:
-    n2v_features = get_node2vec_features(graph, cfg)
-    return [n2v_features]
+def get_index_features(graph: nx.Graph) -> Iterable:
+    return torch.arange(graph.number_of_nodes(), dtype=torch.long)
+
+
+def get_feature_collections(graph: nx.Graph, cfg: Config = None) -> Iterable[Iterable]:
+    # n2v_features = get_node2vec_features(graph, cfg)
+    index_features = get_index_features(graph)
+    return [index_features]
 
 
 def add_features_to_graph(graph: nx.Graph, feature_collections: Iterable[Iterable]) -> None:

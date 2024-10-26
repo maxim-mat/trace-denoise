@@ -11,7 +11,7 @@
   "test_every": 200,
   "denoiser_hidden": 256,
   "denoiser_layers": 2,
-  "num_classes": 19,
+  "num_classes": 20,
   "batch_size": 5,
   "conditional_dropout": 0.1,
   "denoiser": "unet_cond",

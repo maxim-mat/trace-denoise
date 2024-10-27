@@ -1,69 +1,62 @@
 import torch
 import torch.nn as nn
+import torch_geometric
+
 from src.modules.DoubleConv import DoubleConv
 from src.modules.SelfAttention import SelfAttention
-from src.modules.GraphUp import GraphUp
-from src.modules.GraphDown import GraphDown
+from src.modules.Down import Down
+from src.modules.Up import Up
+from src.modules.GraphNodeEncoder import GraphNodeEncoder
 
 
-class ConditionalUnetGraphDenoiser(nn.Module):
-    def __init__(self, in_ch, out_ch, max_input_dim, graph_data, time_dim=128, device="cuda"):
+class ConditionalUnetNodeEmbeddingDenoiser(nn.Module):
+    def __init__(self, in_ch, out_ch, max_input_dim, graph_data: torch_geometric.data.Data, node_dim, node_hidden_dim,
+                 node_final_dim, time_dim=128, device="cuda"):
         super().__init__()
         self.device = device
         self.time_dim = time_dim
         self.max_input_dim = max_input_dim
         self.graph_data = graph_data
+        self.node_encoder = GraphNodeEncoder(self.graph_data.num_nodes, embedding_dim=node_dim,
+                                             hidden_dim=node_hidden_dim, output_dim=node_final_dim)
 
-        self.inc = DoubleConv(in_ch, 64)
-        self.down1 = GraphDown(64, 128, self.graph_data,
-                               node_embed_dim=512, graph_hidden_dim=256, emb_dim=time_dim)
+        self.inc = DoubleConv(node_final_dim, 64)
+        self.down1 = Down(64, 128, emb_dim=time_dim)
         self.sa1 = SelfAttention(128, max_input_dim // 2)
-        self.down2 = GraphDown(128, 256, self.graph_data,
-                               node_embed_dim=1024, graph_hidden_dim=512, emb_dim=time_dim)
+        self.down2 = Down(128, 256, emb_dim=time_dim)
         self.sa2 = SelfAttention(256, max_input_dim // 4)
-        self.down3 = GraphDown(256, 256, self.graph_data,
-                               node_embed_dim=1024, graph_hidden_dim=512, emb_dim=time_dim)
+        self.down3 = Down(256, 256, emb_dim=time_dim)
         self.sa3 = SelfAttention(256, max_input_dim // 8)
 
         self.bot1 = DoubleConv(256, 512)
         self.bot2 = DoubleConv(512, 512)
         self.bot3 = DoubleConv(512, 256)
 
-        self.up1 = GraphUp(512, 128, self.graph_data,
-                           node_embed_dim=512, graph_hidden_dim=256, emb_dim=time_dim)
+        self.up1 = Up(512, 128, emb_dim=time_dim)
         self.sa4 = SelfAttention(128, max_input_dim // 4)
-        self.up2 = GraphUp(256, 64, self.graph_data,
-                           node_embed_dim=256, graph_hidden_dim=128, emb_dim=time_dim)
+        self.up2 = Up(256, 64, emb_dim=time_dim)
         self.sa5 = SelfAttention(64, max_input_dim // 2)
-        self.up3 = GraphUp(128, 64, self.graph_data,
-                           node_embed_dim=256, graph_hidden_dim=128,  emb_dim=time_dim)
+        self.up3 = Up(128, 64, emb_dim=time_dim)
         self.sa6 = SelfAttention(64, max_input_dim)
 
         self.inc_cond = DoubleConv(in_ch, 64)
-        self.down1_cond = GraphDown(64, 128, self.graph_data,
-                                    node_embed_dim=512, graph_hidden_dim=256, emb_dim=time_dim)
+        self.down1_cond = Down(64, 128, emb_dim=time_dim)
         self.sa1_cond = SelfAttention(128, max_input_dim // 2)
-        self.down2_cond = GraphDown(128, 256, self.graph_data,
-                                    node_embed_dim=1024, graph_hidden_dim=512, emb_dim=time_dim)
+        self.down2_cond = Down(128, 256, emb_dim=time_dim)
         self.sa2_cond = SelfAttention(256, max_input_dim // 4)
-        self.down3_cond = GraphDown(128, 256, self.graph_data,
-                                    node_embed_dim=1024, graph_hidden_dim=512, emb_dim=time_dim)
+        self.down3_cond = Down(256, 256, emb_dim=time_dim)
         self.sa3_cond = SelfAttention(256, max_input_dim // 8)
 
         self.bot1_cond = DoubleConv(256, 512)
         self.bot2_cond = DoubleConv(512, 512)
         self.bot3_cond = DoubleConv(512, 256)
 
-        self.up1_cond = GraphUp(512, 128, self.graph_data,
-                                node_embed_dim=512, graph_hidden_dim=256, emb_dim=time_dim)
+        self.up1_cond = Up(512, 128, emb_dim=time_dim)
         self.sa4_cond = SelfAttention(128, max_input_dim // 4)
-        self.up2_cond = GraphUp(256, 64, self.graph_data,
-                                node_embed_dim=256, graph_hidden_dim=128, emb_dim=time_dim)
+        self.up2_cond = Up(256, 64, emb_dim=time_dim)
         self.sa5_cond = SelfAttention(64, max_input_dim // 2)
-        self.up3_cond = GraphUp(128, 64, self.graph_data,
-                                node_embed_dim=256, graph_hidden_dim=128,  emb_dim=time_dim)
+        self.up3_cond = Up(128, 64, emb_dim=time_dim)
         self.sa6_cond = SelfAttention(64, max_input_dim)
-
         self.outc = nn.Conv1d(64, out_ch, kernel_size=1)
 
     def pos_encoding(self, t, channels):
@@ -105,9 +98,14 @@ class ConditionalUnetGraphDenoiser(nn.Module):
         x = self.outc(x)
         return x
 
+    def _get_gnn_encoded_sequences(self, x, node_embeddings):
+        pass
+
     def _forward_cond(self, x, y, t):
         t = t.unsqueeze(-1).type(torch.float)
         t = self.pos_encoding(t, self.time_dim)
+        node_embeddings = self.node_encoder(self.graph_data)
+        x = self._get_gnn_encoded_sequences(x, node_embeddings)
 
         y1 = self.inc_cond(y)
         x1 = self.inc(x)

@@ -31,7 +31,7 @@ def get_onehot_features(graph: nx.Graph) -> Iterable:
 
 
 def get_index_features(graph: nx.Graph) -> Iterable:
-    return torch.arange(graph.number_of_nodes(), dtype=torch.long)
+    return [[x] for x in np.arange(graph.number_of_nodes())]
 
 
 def get_feature_collections(graph: nx.Graph, cfg: Config = None) -> Iterable[Iterable]:

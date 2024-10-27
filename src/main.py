@@ -28,11 +28,15 @@ from tqdm import tqdm
 from dataset.dataset import SaladsDataset
 from ddpm.ddpm_multinomial import Diffusion
 from denoisers.ConditionalUnetDenoiser import ConditionalUnetDenoiser
+from denoisers.ConditionalUnetGraphDenoiser import ConditionalUnetGraphDenoiser
+from denoisers.ConditionalUnetNodeEmbeddingDenoiser import ConditionalUnetNodeEmbeddingDenoiser
 from denoisers.ConvolutionDenoiser import ConvolutionDenoiser
 from denoisers.SimpleDenoiser import SimpleDenoiser
 from denoisers.UnetDenoiser import UnetDenoiser
 from utils.initialization import initialize
 from utils import calculate_metrics
+from utils.pm_utils import discover_dk_process
+from utils.graph_utils import prepare_process_model_for_gnn
 
 warnings.filterwarnings("ignore")
 
@@ -201,6 +205,8 @@ def main():
 
     if cfg.enable_gnn:
         dk_process_model, dk_init_marking, dk_final_marking = discover_dk_process(train_dataset, cfg)
+        pm_graph_data = prepare_process_model_for_gnn(dk_process_model, dk_init_marking, dk_final_marking,
+                                                      cfg).to(cfg.device)
 
     train_loader = DataLoader(
         train_dataset,
@@ -219,8 +225,13 @@ def main():
         denoiser = UnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
                                 max_input_dim=salads_dataset.sequence_length).to(cfg.device).float()
     elif cfg.denoiser == "unet_cond":
-        denoiser = ConditionalUnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
-                                           max_input_dim=salads_dataset.sequence_length).to(cfg.device).float()
+        if cfg.enable_gnn:
+            denoiser = ConditionalUnetGraphDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
+                                                    max_input_dim=salads_dataset.sequence_length,
+                                                    graph_data=pm_graph_data).to(cfg.device).float()
+        else:
+            denoiser = ConditionalUnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
+                                               max_input_dim=salads_dataset.sequence_length).to(cfg.device).float()
     elif cfg.denoiser == "conv":
         denoiser = ConvolutionDenoiser(input_dim=cfg.num_classes, output_dim=cfg.num_classes, num_layers=10).to(
             cfg.device).float()
@@ -230,6 +241,7 @@ def main():
             cfg.device).float()
     if cfg.parallelize:
         denoiser = nn.DataParallel(denoiser, device_ids=[0, 1])
+
     optimizer = AdamW(denoiser.parameters(), cfg.learning_rate)
     criterion = nn.MSELoss() if cfg.predict_on == 'noise' else nn.CrossEntropyLoss()
     summary = SummaryWriter(cfg.summary_path)

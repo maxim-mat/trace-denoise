@@ -19,7 +19,7 @@
   "mode": "cond",
   "predict_on": "original",
   "seed": 42,
-  "enable_gnn": false,
+  "enable_gnn": true,
   "n2v_dimensions": 64,
   "n2v_walk_length": 30,
   "n2v_num_walks": 2000,

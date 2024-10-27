@@ -1,5 +1,7 @@
 import torch
 import torch.nn as nn
+import torch_geometric
+
 from src.modules.DoubleConv import DoubleConv
 from src.modules.SelfAttention import SelfAttention
 from src.modules.GraphUp import GraphUp
@@ -7,7 +9,7 @@ from src.modules.GraphDown import GraphDown
 
 
 class ConditionalUnetGraphDenoiser(nn.Module):
-    def __init__(self, in_ch, out_ch, max_input_dim, graph_data, time_dim=128, device="cuda"):
+    def __init__(self, in_ch, out_ch, max_input_dim, graph_data: torch_geometric.data.Data, time_dim=128, device="cuda"):
         super().__init__()
         self.device = device
         self.time_dim = time_dim

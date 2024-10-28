@@ -15,9 +15,8 @@ import torch
 import torch.nn as nn
 import torch_geometric.data
 from scipy.stats import wasserstein_distance
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import roc_auc_score, accuracy_score, precision_score, recall_score, f1_score
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import OneHotEncoder
 from sklearn.preprocessing import OneHotEncoder
 from tensorboardX import SummaryWriter
 from torch.optim import AdamW
@@ -57,7 +56,7 @@ def save_ckpt(model, opt, epoch, cfg, train_loss, test_loss, best=False):
 def evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch):
     denoiser.eval()
     total_loss = 0.0
-    accs, recalls, precisions, f1s, aucs, dists = [], [], [], [], [], []
+    results_accumulator = {'x': [], 'y': [], 'x_hat': []}
     l = len(test_loader)
     with torch.no_grad():
         for i, (x, y) in enumerate(test_loader):
@@ -67,46 +66,38 @@ def evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch):
             x_t, eps = diffuser.noise_data(x, t)
             x_hat = diffuser.sample(denoiser, y.shape[0], cfg.num_classes, denoiser.max_input_dim, y,
                                     cfg.predict_on)
-            if i == l:
-                with open(os.path.join(cfg.summary_path, f"epoch_{epoch}_batch_{i}_test.pkl"), "wb") as f:
-                    pkl.dump({"original": x, "denoised": x_hat}, f)
-            x_hat_softmax = torch.softmax(x_hat, dim=1)
-            wasserstein_dist = np.mean(
-                [wasserstein_distance(xi, xhi) for xi, xhi in
-                 zip(torch.argmax(x, dim=1).to('cpu'), torch.argmax(x_hat_softmax, dim=1).to('cpu'))])
-            try:
-                auc = roc_auc_score(torch.cat([x for x in torch.argmax(x, dim=1).to('cpu')], dim=0),
-                                    torch.cat([x for x in x_hat_softmax.to('cpu')], dim=1).transpose(0, 1),
-                                    average='macro', multi_class='ovr')
-            except Exception as e:
-                auc = -1
-            acc, recall, precision, f1 = calculate_metrics(torch.argmax(x, dim=1).to('cpu'),
-                                                           torch.argmax(x_hat_softmax, dim=1).to('cpu'))
-            accs.append(acc)
-            recalls.append(recall)
-            precisions.append(precision)
-            f1s.append(f1)
-            aucs.append(auc)
-            dists.append(wasserstein_dist)
-            summary.add_scalar("dist_test", wasserstein_dist, global_step=epoch * l + i)
-            summary.add_scalar("accuracy_test", acc, global_step=epoch * l + i)
-            summary.add_scalar("recall_test", recall, global_step=epoch * l + i)
-            summary.add_scalar("precision_test", precision, global_step=epoch * l + i)
-            summary.add_scalar("f1_test", f1, global_step=epoch * l + i)
-            summary.add_scalar("auc_test", auc, global_step=epoch * l + i)
+            results_accumulator['x'].append(x)
+            results_accumulator['y'].append(y)
+            results_accumulator['x_hat'].append(x_hat)
+
             output = denoiser(x_t, t, y)
             loss = criterion(output, eps) if cfg.predict_on == 'noise' else criterion(output, x)
             total_loss += loss.item()
             summary.add_scalar("MSE_test", loss.item(), global_step=epoch * l + i)
+
+        x_argmax = torch.argmax(torch.cat(results_accumulator['x'], dim=0), dim=1)
+        y_cat = torch.cat(results_accumulator['y'], dim=0)
+        x_hat_logit = torch.cat(results_accumulator['x_hat'], dim=0)
+        x_hat_softmax = torch.softmax(x_hat_logit, dim=1).to('cpu')
+        x_hat_argmax = torch.argmax(x_hat_softmax, dim=1).to('cpu')
+        auc = roc_auc_score(x_argmax, x_hat_softmax.transpose(0, 1))
+        w2 = np.mean([wasserstein_distance(xi, xhi) for xi, xhi in zip(x_argmax, x_hat_argmax)])
+        accuracy = accuracy_score(x_argmax, x_hat_argmax, average='micro', zero_division=np.nan)
+        precision = precision_score(x_argmax, x_hat_argmax, average='micro', zero_division=np.nan)
+        recall = recall_score(x_argmax, x_hat_argmax, average='micro', zero_division=np.nan)
+        f1 = f1_score(x_argmax, x_hat_argmax, average='micro', zero_division=np.nan)
         average_loss = total_loss / l
-        average_acc = np.mean(accs)
-        average_recall = np.mean(recalls)
-        average_precision = np.mean(precisions)
-        average_f1 = np.mean(f1s)
-        average_auc = np.mean(aucs)
-        average_dist = np.mean(dists)
+        with open(os.path.join(cfg.summary_path, f"epoch_{epoch}_test.pkl"), "wb") as f:
+            pkl.dump({"original": x, "denoised": x_hat}, f)
+
+        summary.add_scalar("dist_test", w2, global_step=epoch * l)
+        summary.add_scalar("accuracy_test", accuracy, global_step=epoch * l)
+        summary.add_scalar("recall_test", recall, global_step=epoch * l)
+        summary.add_scalar("precision_test", precision, global_step=epoch * l)
+        summary.add_scalar("f1_test", f1, global_step=epoch * l)
+        summary.add_scalar("auc_test", auc, global_step=epoch * l)
         denoiser.train()
-    return average_loss, average_acc, average_recall, average_precision, average_f1, average_auc, average_dist
+    return average_loss, accuracy, recall, precision, f1, auc, w2
 
 
 def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, cfg, summary, logger):
@@ -149,30 +140,25 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, c
                     y = y.permute(0, 2, 1).to(cfg.device).float()
                     x_hat = diffuser.sample(denoiser, y.shape[0], cfg.num_classes, denoiser.max_input_dim, y,
                                             cfg.predict_on)
-                    if epoch % 100 == 0:
-                        with open(os.path.join(cfg.summary_path, f"epoch_{epoch}_train.pkl"), "wb") as f:
-                            pkl.dump({"original": x, "denoised": x_hat}, f)
-                    x_hat_softmax = torch.softmax(x_hat, dim=1)
-                    wasserstein_dist = np.mean(
-                        [wasserstein_distance(xi, xhi) for xi, xhi in
-                         zip(torch.argmax(x, dim=1).to('cpu'), torch.argmax(x_hat_softmax, dim=1).to('cpu'))]
-                    )
-                    try:
-                        auc = roc_auc_score(torch.cat([x for x in torch.argmax(x, dim=1).to('cpu')], dim=0),
-                                            torch.cat([x for x in x_hat_softmax.to('cpu')], dim=1).transpose(0, 1),
-                                            average='macro', multi_class='ovr')
-                    except Exception as e:
-                        auc = -1
-                    acc, recall, precision, f1 = calculate_metrics(torch.argmax(x, dim=1).to('cpu'),
-                                                                   torch.argmax(x_hat_softmax, dim=1).to('cpu'))
-                    train_acc.append(acc)
+                    x_argmax = torch.argmax(x, dim=1)
+                    x_hat_softmax = torch.softmax(x_hat, dim=1).to('cpu')
+                    x_hat_argmax = torch.argmax(x_hat_softmax, dim=1).to('cpu')
+                    auc = roc_auc_score(x_argmax, x_hat_softmax.transpose(0, 1))
+                    w2 = np.mean([wasserstein_distance(xi, xhi) for xi, xhi in zip(x_argmax, x_hat_argmax)])
+                    accuracy = accuracy_score(x_argmax, x_hat_argmax, average='micro', zero_division=np.nan)
+                    precision = precision_score(x_argmax, x_hat_argmax, average='micro', zero_division=np.nan)
+                    recall = recall_score(x_argmax, x_hat_argmax, average='micro', zero_division=np.nan)
+                    f1 = f1_score(x_argmax, x_hat_argmax, average='micro', zero_division=np.nan)
+                    with open(os.path.join(cfg.summary_path, f"epoch_{epoch}_train.pkl"), "wb") as f:
+                        pkl.dump({"original": x, "denoised": x_hat}, f)
+                    train_acc.append(accuracy)
                     train_recall.append(recall)
                     train_precision.append(precision)
                     train_f1.append(f1)
                     train_auc.append(auc)
-                    train_dist.append(wasserstein_dist)
-                    summary.add_scalar("dist_train", wasserstein_dist, global_step=epoch * l)
-                    summary.add_scalar("accuracy_train", acc, global_step=epoch * l)
+                    train_dist.append(w2)
+                    summary.add_scalar("dist_train", w2, global_step=epoch * l)
+                    summary.add_scalar("accuracy_train", accuracy, global_step=epoch * l)
                     summary.add_scalar("recall_train", recall, global_step=epoch * l)
                     summary.add_scalar("precision_train", precision, global_step=epoch * l)
                     summary.add_scalar("f1_train", f1, global_step=epoch * l)

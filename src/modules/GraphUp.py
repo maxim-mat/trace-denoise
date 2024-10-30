@@ -34,5 +34,5 @@ class GraphUp(nn.Module):
         x = torch.cat([skip_x, x], dim=1)
         x = self.conv(x)
         emb = self.emb_layer(t).unsqueeze(2).repeat(1, 1, x.shape[2])
-        graph_emb = self.graph_encoder(self.graph_data)
+        graph_emb = self.graph_encoder(self.graph_data).unsqueeze(2).repeat(1, 1, x.shape[2])
         return x + emb + graph_emb

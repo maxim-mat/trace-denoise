@@ -48,7 +48,7 @@ class ConditionalUnetGraphDenoiser(nn.Module):
         self.down2_cond = GraphDown(128, 256, self.graph_data,
                                     node_embed_dim=1024, graph_hidden_dim=512, emb_dim=time_dim)
         self.sa2_cond = SelfAttention(256, max_input_dim // 4)
-        self.down3_cond = GraphDown(128, 256, self.graph_data,
+        self.down3_cond = GraphDown(256, 256, self.graph_data,
                                     node_embed_dim=1024, graph_hidden_dim=512, emb_dim=time_dim)
         self.sa3_cond = SelfAttention(256, max_input_dim // 8)
 

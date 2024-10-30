@@ -31,5 +31,5 @@ class GraphDown(nn.Module):
     def forward(self, x, t):
         x = self.maxpool_conv(x)
         emb = self.emb_layer(t).unsqueeze(2).repeat(1, 1, x.shape[2])
-        graph_emb = self.graph_encoder(self.graph_data)
+        graph_emb = self.graph_encoder(self.graph_data).unsqueeze(2).repeat(1, 1, x.shape[2])
         return x + emb + graph_emb

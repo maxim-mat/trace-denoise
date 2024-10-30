@@ -68,24 +68,30 @@ def evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch):
                                     cfg.predict_on)
             results_accumulator['x'].append(x)
             results_accumulator['y'].append(y)
-            results_accumulator['x_hat'].append(x_hat)
+            results_accumulator['x_hat'].append(x_hat.permute(0, 2, 1))
 
             output = denoiser(x_t, t, y)
             loss = criterion(output, eps) if cfg.predict_on == 'noise' else criterion(output, x)
             total_loss += loss.item()
             summary.add_scalar("MSE_test", loss.item(), global_step=epoch * l + i)
 
-        x_argmax = torch.argmax(torch.cat(results_accumulator['x'], dim=0), dim=1)
+        x_argmax = torch.argmax(torch.cat(results_accumulator['x'], dim=0), dim=1).to('cpu')
         y_cat = torch.cat(results_accumulator['y'], dim=0)
         x_hat_logit = torch.cat(results_accumulator['x_hat'], dim=0)
-        x_hat_softmax = torch.softmax(x_hat_logit, dim=1).to('cpu')
-        x_hat_argmax = torch.argmax(x_hat_softmax, dim=1).to('cpu')
-        auc = roc_auc_score(x_argmax, x_hat_softmax.transpose(0, 1))
+
+        x_argmax_flat = x_argmax.reshape(-1).to('cpu')
+        x_hat_flat = x_hat_logit.reshape(-1, cfg.num_classes).to('cpu')
+        x_hat_prob_flat = torch.softmax(x_hat_flat, dim=1).to('cpu')
+        x_hat_argmax_flat = torch.argmax(x_hat_prob_flat, dim=1).to('cpu')
+        x_hat_prob = torch.softmax(x_hat_logit, dim=1).to('cpu')
+        x_hat_argmax = torch.argmax(x_hat_prob, dim=1)
+
+        auc = roc_auc_score(x_argmax_flat, x_hat_prob_flat, multi_class='ovr', average='micro')
         w2 = np.mean([wasserstein_distance(xi, xhi) for xi, xhi in zip(x_argmax, x_hat_argmax)])
-        accuracy = accuracy_score(x_argmax, x_hat_argmax, average='micro', zero_division=np.nan)
-        precision = precision_score(x_argmax, x_hat_argmax, average='micro', zero_division=np.nan)
-        recall = recall_score(x_argmax, x_hat_argmax, average='micro', zero_division=np.nan)
-        f1 = f1_score(x_argmax, x_hat_argmax, average='micro', zero_division=np.nan)
+        accuracy = accuracy_score(x_argmax_flat, x_hat_argmax_flat)
+        precision = precision_score(x_argmax_flat, x_hat_argmax_flat, average='macro', zero_division=0)
+        recall = recall_score(x_argmax_flat, x_hat_argmax_flat, average='macro', zero_division=0)
+        f1 = f1_score(x_argmax_flat, x_hat_argmax_flat, average='macro', zero_division=0)
         average_loss = total_loss / l
         with open(os.path.join(cfg.summary_path, f"epoch_{epoch}_test.pkl"), "wb") as f:
             pkl.dump({"original": x, "denoised": x_hat}, f)
@@ -139,16 +145,20 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, c
                     x = x.permute(0, 2, 1).to(cfg.device).float()
                     y = y.permute(0, 2, 1).to(cfg.device).float()
                     x_hat = diffuser.sample(denoiser, y.shape[0], cfg.num_classes, denoiser.max_input_dim, y,
-                                            cfg.predict_on)
-                    x_argmax = torch.argmax(x, dim=1)
-                    x_hat_softmax = torch.softmax(x_hat, dim=1).to('cpu')
-                    x_hat_argmax = torch.argmax(x_hat_softmax, dim=1).to('cpu')
-                    auc = roc_auc_score(x_argmax, x_hat_softmax.transpose(0, 1))
+                                            cfg.predict_on).permute(0, 2, 1)
+                    x_argmax = torch.argmax(x, dim=1).to('cpu')
+                    x_argmax_flat = torch.argmax(x, dim=1).reshape(-1).to('cpu')
+                    x_hat_flat = x_hat.reshape(-1, cfg.num_classes).to('cpu')
+                    x_hat_prob_flat = torch.softmax(x_hat_flat, dim=1).to('cpu')
+                    x_hat_argmax_flat = torch.argmax(x_hat_prob_flat, dim=1).to('cpu')
+                    x_hat_prob = torch.softmax(x_hat, dim=1).to('cpu')
+                    x_hat_argmax = torch.argmax(x_hat_prob, dim=1)
+                    auc = roc_auc_score(x_argmax_flat, x_hat_prob_flat, multi_class='ovr', average='micro')
                     w2 = np.mean([wasserstein_distance(xi, xhi) for xi, xhi in zip(x_argmax, x_hat_argmax)])
-                    accuracy = accuracy_score(x_argmax, x_hat_argmax, average='micro', zero_division=np.nan)
-                    precision = precision_score(x_argmax, x_hat_argmax, average='micro', zero_division=np.nan)
-                    recall = recall_score(x_argmax, x_hat_argmax, average='micro', zero_division=np.nan)
-                    f1 = f1_score(x_argmax, x_hat_argmax, average='micro', zero_division=np.nan)
+                    accuracy = accuracy_score(x_argmax_flat, x_hat_argmax_flat)
+                    precision = precision_score(x_argmax_flat, x_hat_argmax_flat, average='macro', zero_division=0)
+                    recall = recall_score(x_argmax_flat, x_hat_argmax_flat, average='macro', zero_division=0)
+                    f1 = f1_score(x_argmax_flat, x_hat_argmax_flat, average='macro', zero_division=0)
                     with open(os.path.join(cfg.summary_path, f"epoch_{epoch}_train.pkl"), "wb") as f:
                         pkl.dump({"original": x, "denoised": x_hat}, f)
                     train_acc.append(accuracy)
@@ -197,12 +207,14 @@ def main():
     train_loader = DataLoader(
         train_dataset,
         batch_size=cfg.batch_size,
-        shuffle=True
+        shuffle=True,
+        num_workers=cfg.num_workers
     )
     test_loader = DataLoader(
         test_dataset,
         batch_size=cfg.batch_size,
-        shuffle=True
+        shuffle=True,
+        num_workers=cfg.num_workers
     )
 
     diffuser = Diffusion(noise_steps=cfg.num_timesteps)

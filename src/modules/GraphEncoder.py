@@ -23,9 +23,7 @@ class GraphEncoder(nn.Module):
 
     def forward(self, data):
         x, edge_index = data.x, data.edge_index
-        x = self.embedding(x)
-        x = self.conv1(x, edge_index)
-        x = torch.relu(x)
+        x = self.embedding(x).squeeze(1)
         x = F.relu(self.conv1(x, edge_index))
         x = F.relu(self.conv2(x, edge_index))
         x = F.relu(self.conv3(x, edge_index))

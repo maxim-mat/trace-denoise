@@ -86,7 +86,7 @@ def evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch):
         x_hat_prob = torch.softmax(x_hat_logit, dim=1).to('cpu')
         x_hat_argmax = torch.argmax(x_hat_prob, dim=1)
 
-        auc = roc_auc_score(x_argmax_flat, x_hat_prob_flat, multi_class='ovr', average='micro')
+        auc = roc_auc_score(x_argmax_flat, x_hat_prob_flat, multi_class='ovr', average='macro')
         w2 = np.mean([wasserstein_distance(xi, xhi) for xi, xhi in zip(x_argmax, x_hat_argmax)])
         accuracy = accuracy_score(x_argmax_flat, x_hat_argmax_flat)
         precision = precision_score(x_argmax_flat, x_hat_argmax_flat, average='macro', zero_division=0)
@@ -198,6 +198,7 @@ def main():
     salads_dataset = SaladsDataset(dataset['target'], dataset['stochastic'])
     train_dataset, test_dataset = train_test_split(salads_dataset, train_size=cfg.train_percent, shuffle=True,
                                                    random_state=cfg.seed)
+    logger.info(f"train size: {len(train_dataset)} test size: {len(test_dataset)}")
 
     if cfg.enable_gnn:
         dk_process_model, dk_init_marking, dk_final_marking = discover_dk_process(train_dataset, cfg)

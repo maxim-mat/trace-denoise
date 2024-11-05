@@ -6,6 +6,8 @@ from src.modules.DoubleConv import DoubleConv
 from src.modules.SelfAttention import SelfAttention
 from src.modules.GraphUp import GraphUp
 from src.modules.GraphDown import GraphDown
+from src.modules.Down import Down
+from src.modules.Up import Up
 
 
 class ConditionalUnetGraphDenoiser(nn.Module):
@@ -42,28 +44,22 @@ class ConditionalUnetGraphDenoiser(nn.Module):
         self.sa6 = SelfAttention(64, max_input_dim)
 
         self.inc_cond = DoubleConv(in_ch, 64)
-        self.down1_cond = GraphDown(64, 128, self.graph_data,
-                                    node_embed_dim=512, graph_hidden_dim=256, emb_dim=time_dim)
+        self.down1_cond = Down(64, 128, emb_dim=time_dim)
         self.sa1_cond = SelfAttention(128, max_input_dim // 2)
-        self.down2_cond = GraphDown(128, 256, self.graph_data,
-                                    node_embed_dim=1024, graph_hidden_dim=512, emb_dim=time_dim)
+        self.down2_cond = Down(128, 256, emb_dim=time_dim)
         self.sa2_cond = SelfAttention(256, max_input_dim // 4)
-        self.down3_cond = GraphDown(256, 256, self.graph_data,
-                                    node_embed_dim=1024, graph_hidden_dim=512, emb_dim=time_dim)
+        self.down3_cond = Down(256, 256, emb_dim=time_dim)
         self.sa3_cond = SelfAttention(256, max_input_dim // 8)
 
         self.bot1_cond = DoubleConv(256, 512)
         self.bot2_cond = DoubleConv(512, 512)
         self.bot3_cond = DoubleConv(512, 256)
 
-        self.up1_cond = GraphUp(512, 128, self.graph_data,
-                                node_embed_dim=512, graph_hidden_dim=256, emb_dim=time_dim)
+        self.up1_cond = Up(512, 128, emb_dim=time_dim)
         self.sa4_cond = SelfAttention(128, max_input_dim // 4)
-        self.up2_cond = GraphUp(256, 64, self.graph_data,
-                                node_embed_dim=256, graph_hidden_dim=128, emb_dim=time_dim)
+        self.up2_cond = Up(256, 64, emb_dim=time_dim)
         self.sa5_cond = SelfAttention(64, max_input_dim // 2)
-        self.up3_cond = GraphUp(128, 64, self.graph_data,
-                                node_embed_dim=256, graph_hidden_dim=128,  emb_dim=time_dim)
+        self.up3_cond = Up(128, 64, emb_dim=time_dim)
         self.sa6_cond = SelfAttention(64, max_input_dim)
 
         self.outc = nn.Conv1d(64, out_ch, kernel_size=1)

@@ -1,5 +1,4 @@
 import multiprocessing
-import os
 from typing import Callable
 
 import numpy as np
@@ -99,3 +98,8 @@ def evaluate_sktr_on_dataset(dataset: SaladsDataset, model: src.sktr.sktr.PetriN
         )
 
     return recovered_traces
+
+
+def simulate_process_model(process_model: pm4py.PetriNet, init_marking: pm4py.Marking,
+                           final_marking: pm4py.Marking, n_traces, max_length):
+    pass

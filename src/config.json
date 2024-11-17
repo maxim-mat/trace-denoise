@@ -1,6 +1,6 @@
 {
   "data_path": "../data/pickles/50_salads_unified.pkl",
-  "summary_path": "../runs/unet_cond_gnn_v4_salads_75",
+  "summary_path": "../runs/debug",
   "device": "cuda",
   "parallelize": false,
   "num_epochs": 3000,
@@ -20,6 +20,8 @@
   "predict_on": "original",
   "seed": 42,
   "enable_gnn": true,
+  "graph_hidden": 128,
+  "node_embed_dim": 512,
   "n2v_dimensions": 64,
   "n2v_walk_length": 30,
   "n2v_num_walks": 2000,

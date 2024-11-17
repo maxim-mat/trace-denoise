@@ -31,7 +31,7 @@ def get_onehot_features(graph: nx.Graph) -> Iterable:
 
 
 def get_index_features(graph: nx.Graph) -> Iterable:
-    return [[x] for x in np.arange(graph.number_of_nodes())]
+    return [[x] for x in reversed(np.arange(graph.number_of_nodes()))]
 
 
 def get_feature_collections(graph: nx.Graph, cfg: Config = None) -> Iterable[Iterable]:
@@ -57,5 +57,12 @@ def prepare_process_model_for_gnn(process_model: pm4py.PetriNet, init_marking: p
     model_nx = pm4py.convert_petri_net_to_networkx(process_model, init_marking, final_marking)
     feature_collections = get_feature_collections(model_nx, cfg)
     add_features_to_graph(model_nx, feature_collections)
+    data = from_networkx(model_nx)
+    return data
+
+
+def prepare_process_model_for_hetero_gnn(process_model: pm4py.PetriNet, init_marking: pm4py.Marking,
+                                         final_marking: pm4py.Marking, cfg: Config) -> torch_geometric.data.Data:
+    model_nx = pm4py.convert_petri_net_to_networkx(process_model, init_marking, final_marking)
     data = from_networkx(model_nx)
     return data

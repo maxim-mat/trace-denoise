@@ -25,6 +25,8 @@ class Config:
     seed: int = None
     max_seq_len: int = None
     enable_gnn: bool = None
+    graph_hidden: int = None
+    node_embed_dim: int = None
     n2v_dimensions: int = None
     n2v_walk_length: int = None
     n2v_num_walks: int = None

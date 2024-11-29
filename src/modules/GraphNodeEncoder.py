@@ -1,53 +1,46 @@
-import torch_geometric as pyg
-from torch_geometric.nn import GINConv
-import torch.nn as nn
-import torch.nn.functional as F
 import torch
+import torch.nn.functional as F
+from torch_geometric.nn import HeteroConv, GATConv
+import torch.nn as nn
 
 
 class GraphNodeEncoder(nn.Module):
-    def __init__(self, num_nodes, embedding_dim, hidden_dim, output_dim, dropout_prob=0.1):
+    def __init__(self, embedding_dim, hidden_dim, output_dim, heads=8, dropout_prob=0.1):
         super().__init__()
-        self.embedding = nn.Embedding(num_nodes, embedding_dim)
+        # Define GNN layers for each edge type using HeteroConv
+        self.conv1 = HeteroConv({
+            ('transition', 'transition_to_place', 'place'): GATConv(
+                embedding_dim, hidden_dim, heads=heads, dropout=dropout_prob, add_self_loops=False),
+            ('place', 'place_to_transition', 'transition'): GATConv(
+                embedding_dim, hidden_dim, heads=heads, dropout=dropout_prob, add_self_loops=False)
+        }, aggr='sum')
 
-        self.conv1 = GINConv(
-            nn.Sequential(
-                nn.Linear(embedding_dim, hidden_dim),
-                nn.BatchNorm1d(hidden_dim),
-                nn.ReLU(),
-                nn.Dropout(p=dropout_prob),
-                nn.Linear(hidden_dim, hidden_dim)
-            )
-        )
+        self.conv2 = HeteroConv({
+            ('transition', 'transition_to_place', 'place'): GATConv(
+                hidden_dim * heads, hidden_dim, heads=1, concat=False, dropout=dropout_prob, add_self_loops=False),
+            ('place', 'place_to_transition', 'transition'): GATConv(
+                hidden_dim * heads, hidden_dim, heads=1, concat=False, dropout=dropout_prob, add_self_loops=False)
+        }, aggr='sum')
 
-        self.conv2 = GINConv(
-            nn.Sequential(
-                nn.Linear(hidden_dim, hidden_dim),
-                nn.BatchNorm1d(hidden_dim),
-                nn.ReLU(),
-                nn.Dropout(p=dropout_prob),
-                nn.Linear(hidden_dim, hidden_dim)
-            )
-        )
-        # self.conv2 = GINConv(
-        #     nn.Sequential(nn.Linear(hidden_dim, hidden_dim), nn.ReLU(), nn.Linear(hidden_dim, hidden_dim)))
-        # self.conv3 = GINConv(
-        #     nn.Sequential(nn.Linear(hidden_dim, hidden_dim), nn.ReLU(), nn.Linear(hidden_dim, hidden_dim)))
-        # self.conv4 = GINConv(
-        #     nn.Sequential(nn.Linear(hidden_dim, hidden_dim), nn.ReLU(), nn.Linear(hidden_dim, hidden_dim)))
-        # self.conv5 = GINConv(
-        #     nn.Sequential(nn.Linear(hidden_dim, output_dim), nn.ReLU(), nn.Linear(output_dim, output_dim)))
-        self.lin1 = nn.Linear(hidden_dim, hidden_dim)
-        self.lin2 = nn.Linear(hidden_dim, output_dim)
+        # Define output layers for each node type
+        self.output_layer = nn.ModuleDict({
+            'transition': nn.Linear(hidden_dim, output_dim),
+            'place': nn.Linear(hidden_dim, output_dim)
+        })
 
-    def forward(self, data):
-        x, edge_index = data.x, data.edge_index
-        x = self.embedding(x).squeeze(1)
-        x = F.relu(self.conv1(x, edge_index))
-        x = F.relu(self.conv2(x, edge_index))
-        # x = F.relu(self.conv3(x, edge_index))
-        # x = F.relu(self.conv4(x, edge_index))
-        # x = self.conv5(x, edge_index)
-        x = F.relu(self.lin1(x))
-        x = self.lin2(x)
-        return x
+    def forward(self, x_dict, edge_index_dict):
+        # x_dict: node features for each node type
+        # edge_index_dict: edge indices for each edge type
+
+        # First convolution layer with activation
+        x_dict = self.conv1(x_dict, edge_index_dict)
+        x_dict = {node_type: F.relu(x) for node_type, x in x_dict.items()}
+
+        # Second convolution layer with activation
+        x_dict = self.conv2(x_dict, edge_index_dict)
+        x_dict = {node_type: F.relu(x) for node_type, x in x_dict.items()}
+
+        # Apply output layers to each node type
+        out_dict = {node_type: self.output_layer[node_type](x) for node_type, x in x_dict.items()}
+
+        return out_dict

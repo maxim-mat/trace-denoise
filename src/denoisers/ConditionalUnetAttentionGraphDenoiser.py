@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch_geometric
+from torch_geometric.nn import to_hetero
 
 from src.modules.DoubleConv import DoubleConv
 from src.modules.Up import Up
@@ -12,15 +13,18 @@ from src.modules.GraphNodeEncoder import GraphNodeEncoder
 
 class ConditionalUnetAttentionGraphDenoiser(nn.Module):
     def __init__(self, in_ch, out_ch, max_input_dim, graph_data: torch_geometric.data.Data, node_embed_dim,
-                 graph_hidden_dim, time_dim=128, device="cuda"):
+                 graph_hidden_dim, metadata=None, time_dim=128, device="cuda"):
         super().__init__()
         self.device = device
         self.time_dim = time_dim
         self.max_input_dim = max_input_dim
         self.graph_data = graph_data
+        self.metadata = metadata
 
-        self.graph_node_encoder = GraphNodeEncoder(num_nodes=graph_data.num_nodes, embedding_dim=node_embed_dim,
+        self.graph_node_encoder = GraphNodeEncoder(embedding_dim=node_embed_dim,
                                                    hidden_dim=graph_hidden_dim, output_dim=graph_hidden_dim)
+        # if self.metadata is not None:
+        #     self.graph_node_encoder = to_hetero(self.graph_node_encoder, self.metadata)
 
         self.inc = DoubleConv(in_ch, 64)
         self.down1 = Down(64, 128, emb_dim=time_dim)
@@ -110,7 +114,7 @@ class ConditionalUnetAttentionGraphDenoiser(nn.Module):
         t = t.unsqueeze(-1).type(torch.float)
         t = self.pos_encoding(t, self.time_dim)
 
-        graph_node_embedding = self.graph_node_encoder(self.graph_data)
+        graph_node_embedding = self.graph_node_encoder(self.graph_data.x_dict, self.graph_data.edge_index_dict)
         unrefined_traces = torch.argmax(y, dim=1)
         unrefined_nodes = graph_node_embedding[unrefined_traces]
 

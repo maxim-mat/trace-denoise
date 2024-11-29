@@ -33,6 +33,7 @@ from denoisers.ConvolutionDenoiser import ConvolutionDenoiser
 from denoisers.SimpleDenoiser import SimpleDenoiser
 from denoisers.UnetDenoiser import UnetDenoiser
 from src.denoisers.ConditionalUnetAttentionGraphDenoiser import ConditionalUnetAttentionGraphDenoiser
+from src.utils.graph_utils import prepare_process_model_for_hetero_gnn
 from utils.initialization import initialize
 from utils import calculate_metrics
 from utils.pm_utils import discover_dk_process
@@ -201,10 +202,12 @@ def main():
                                                    random_state=cfg.seed)
     logger.info(f"train size: {len(train_dataset)} test size: {len(test_dataset)}")
 
+    metadata = None
     if cfg.enable_gnn:
         dk_process_model, dk_init_marking, dk_final_marking = discover_dk_process(train_dataset, cfg)
-        pm_graph_data = prepare_process_model_for_gnn(dk_process_model, dk_init_marking, dk_final_marking,
-                                                      cfg).to(cfg.device)
+        pm_graph_data, metadata = prepare_process_model_for_hetero_gnn(dk_process_model, dk_init_marking,
+                                                                       dk_final_marking)
+        pm_graph_data = pm_graph_data.to(cfg.device)
 
     train_loader = DataLoader(
         train_dataset,
@@ -230,7 +233,8 @@ def main():
                                                              max_input_dim=salads_dataset.sequence_length,
                                                              graph_data=pm_graph_data,
                                                              node_embed_dim=cfg.node_embed_dim,
-                                                             graph_hidden_dim=cfg.graph_hidden).to(cfg.device).float()
+                                                             graph_hidden_dim=cfg.graph_hidden,
+                                                             metadata=metadata).to(cfg.device).float()
         else:
             denoiser = ConditionalUnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
                                                max_input_dim=salads_dataset.sequence_length).to(cfg.device).float()

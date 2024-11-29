@@ -21,7 +21,7 @@
   "seed": 42,
   "enable_gnn": true,
   "graph_hidden": 128,
-  "node_embed_dim": 512,
+  "node_embed_dim": 1,
   "n2v_dimensions": 64,
   "n2v_walk_length": 30,
   "n2v_num_walks": 2000,

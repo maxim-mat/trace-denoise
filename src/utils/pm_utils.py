@@ -4,7 +4,8 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 import pm4py
-
+import torch
+from itertools import groupby
 from src.dataset.dataset import SaladsDataset
 from src.sktr.sktr import convert_dataset_to_df, from_discovered_model_to_PetriNet, recover_single_trace, \
     sfmx_mat_to_sk_trace
@@ -20,8 +21,8 @@ def prepare_df_cols_for_discovery(df):
     return df_copy
 
 
-def convert_dataset_to_train_process_df(dataset: SaladsDataset, cfg: Config):
-    dk_process_df, _ = convert_dataset_to_df(dataset, cfg.activity_names)
+def convert_dataset_to_train_process_df(deterministic, stochastic, cfg: Config):
+    dk_process_df, _ = convert_dataset_to_df(deterministic, stochastic, cfg.activity_names)
     return prepare_df_cols_for_discovery(dk_process_df)
 
 
@@ -70,8 +71,26 @@ def train_sktr(dataset: SaladsDataset, cfg: Config) -> src.sktr.sktr.PetriNet:
     return model
 
 
-def discover_dk_process(dataset: SaladsDataset, cfg: Config) -> tuple[pm4py.PetriNet, pm4py.Marking, pm4py.Marking]:
-    df_train = convert_dataset_to_train_process_df(dataset, cfg)
+def remove_duplicates_trace(trace):
+    return torch.tensor([x.item() for x, _ in groupby(trace)])
+
+
+def remove_duplicates_dataset(dataset: SaladsDataset):
+    stochastics = [x[1] for x in dataset]
+    one_hot = torch.argmax(torch.stack([x[0] for x in dataset], axis=0).permute(0, 2, 1), dim=1)
+    deterministics = [remove_duplicates_trace(x) for x in one_hot]
+    return deterministics, stochastics
+
+
+def dataset_to_list(dataset: SaladsDataset):
+    deterministics = torch.argmax(torch.stack([x[0] for x in dataset], axis=0).permute(0, 2, 1), dim=1)
+    stochastics = torch.stack([x[1] for x in dataset], axis=0).permute(0, 2, 1)
+    return deterministics, stochastics
+
+
+def discover_dk_process(dataset: SaladsDataset, cfg: Config, preprocess=dataset_to_list):
+    deterministic, stochastic = preprocess(dataset)
+    df_train = convert_dataset_to_train_process_df(deterministic, stochastic, cfg)
     process_discovery_method = resolve_process_discovery_method(cfg.process_discovery_method)
     return process_discovery_method(df_train)
 

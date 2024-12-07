@@ -2344,12 +2344,7 @@ def main():
     print(mean(stochastic_acc), mean(argmax_acc))
 
 
-def convert_dataset_to_df(dataset: SaladsDataset, activity_names: dict):
-    deterministic, stochastic = (torch.stack([x[0] for x in dataset], axis=0),
-                                 torch.stack([x[1] for x in dataset], axis=0))
-    deterministic = torch.argmax(deterministic.permute(0, 2, 1), dim=1)
-    stochastic = stochastic.permute(0, 2, 1)
-
+def convert_dataset_to_df(deterministic, stochastic, activity_names: dict):
     df_deterministic = pd.DataFrame(
         {
             'concept:name': [activity_names[i.item()] for trace in deterministic for i in trace],

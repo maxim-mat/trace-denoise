@@ -27,6 +27,7 @@ from tqdm import tqdm
 from dataset.dataset import SaladsDataset
 from ddpm.ddpm_multinomial import Diffusion
 from denoisers.ConditionalUnetDenoiser import ConditionalUnetDenoiser
+from denoisers.ConditionalUnetMatrixDenoiser import ConditionalUnetMatrixDenoiser
 from denoisers.ConditionalUnetGraphDenoiser import ConditionalUnetGraphDenoiser
 from denoisers.ConditionalUnetNodeEmbeddingDenoiser import ConditionalUnetNodeEmbeddingDenoiser
 from denoisers.ConvolutionDenoiser import ConvolutionDenoiser
@@ -36,8 +37,8 @@ from src.denoisers.ConditionalUnetAttentionGraphDenoiser import ConditionalUnetA
 from src.utils.graph_utils import prepare_process_model_for_hetero_gnn
 from utils.initialization import initialize
 from utils import calculate_metrics
-from utils.pm_utils import discover_dk_process
-from utils.graph_utils import prepare_process_model_for_gnn
+from utils.pm_utils import discover_dk_process, remove_duplicates_dataset
+from utils.graph_utils import prepare_process_model_for_gnn, get_process_model_reachability_graph_transition_matrix
 
 warnings.filterwarnings("ignore")
 
@@ -55,7 +56,7 @@ def save_ckpt(model, opt, epoch, cfg, train_loss, test_loss, best=False):
         torch.save(ckpt, os.path.join(cfg.summary_path, 'best.ckpt'))
 
 
-def evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch):
+def evaluate(diffuser, denoiser, criterion, test_loader, transition_matrix, cfg, summary, epoch, extra_criterion=None):
     denoiser.eval()
     total_loss = 0.0
     results_accumulator = {'x': [], 'y': [], 'x_hat': []}
@@ -72,8 +73,14 @@ def evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch):
             results_accumulator['y'].append(y)
             results_accumulator['x_hat'].append(x_hat.permute(0, 2, 1))
 
-            output = denoiser(x_t, t, y)
-            loss = criterion(output, eps) if cfg.predict_on == 'noise' else criterion(output, x)
+            output, matrix_hat = denoiser(x_t, t, y)
+            if not cfg.enable_gnn:
+                loss = criterion(output, eps) if cfg.predict_on == 'noise' else criterion(output, x)
+            else:
+                loss = 0.8 * criterion(output, eps) + \
+                       0.2 * extra_criterion(
+                    matrix_hat,
+                    transition_matrix.flatten().repeat(matrix_hat.shape[0], 1))
             total_loss += loss.item()
             summary.add_scalar("MSE_test", loss.item(), global_step=epoch * l + i)
 
@@ -108,7 +115,8 @@ def evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch):
     return average_loss, accuracy, recall, precision, f1, auc, w2
 
 
-def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, cfg, summary, logger):
+def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, transition_matrix, cfg, summary, logger,
+          extra_criterion=None):
     train_losses, test_losses, test_dist, test_acc, test_precision, test_recall, test_f1, test_auc = \
         [], [], [], [], [], [], [], []
     train_dist, train_acc, train_precision, train_recall, train_f1, train_auc = [], [], [], [], [], []
@@ -125,8 +133,14 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, c
             x_t, eps = diffuser.noise_data(x, t)  # each item in batch gets different level of noise based on timestep
             if np.random.random() < cfg.conditional_dropout:
                 y = None
-            output = denoiser(x_t, t, y)
-            loss = criterion(output, eps) if cfg.predict_on == 'noise' else criterion(output, x)
+            output, matrix_hat = denoiser(x_t, t, y)
+            if not cfg.enable_gnn:
+                loss = criterion(output, eps) if cfg.predict_on == 'noise' else criterion(output, x)
+            else:
+                loss = 0.8 * criterion(output, eps) + \
+                       0.2 * extra_criterion(
+                    matrix_hat,
+                    transition_matrix.flatten().repeat(matrix_hat.shape[0], 1))
             loss.backward()
             optimizer.step()
 
@@ -178,7 +192,8 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, c
                 denoiser.train()
 
             test_epoch_loss, test_epoch_acc, test_epoch_recall, test_epoch_precision, test_epoch_f1, test_epoch_auc, \
-                test_epoch_dist = evaluate(diffuser, denoiser, criterion, test_loader, cfg, summary, epoch)
+                test_epoch_dist = evaluate(diffuser, denoiser, criterion, test_loader, transition_matrix, cfg, summary,
+                                           epoch, extra_criterion)
             test_dist.append(test_epoch_dist)
             test_losses.append(test_epoch_loss)
             test_acc.append(test_epoch_acc)
@@ -201,13 +216,15 @@ def main():
     train_dataset, test_dataset = train_test_split(salads_dataset, train_size=cfg.train_percent, shuffle=True,
                                                    random_state=cfg.seed)
     logger.info(f"train size: {len(train_dataset)} test size: {len(test_dataset)}")
-
+    rg_transition_matrix = None
     metadata = None
+    extra_criterion = None
     if cfg.enable_gnn:
-        dk_process_model, dk_init_marking, dk_final_marking = discover_dk_process(train_dataset, cfg)
-        pm_graph_data, metadata = prepare_process_model_for_hetero_gnn(dk_process_model, dk_init_marking,
-                                                                       dk_final_marking)
-        pm_graph_data = pm_graph_data.to(cfg.device)
+        dk_process_model, dk_init_marking, dk_final_marking = discover_dk_process(train_dataset, cfg,
+                                                                                  preprocess=remove_duplicates_dataset)
+        rg_nx, rg_transition_matrix = get_process_model_reachability_graph_transition_matrix(dk_process_model,
+                                                                                             dk_init_marking)
+        rg_transition_matrix = torch.tensor(rg_transition_matrix, device=cfg.device).float()
 
     train_loader = DataLoader(
         train_dataset,
@@ -229,12 +246,10 @@ def main():
                                 max_input_dim=salads_dataset.sequence_length).to(cfg.device).float()
     elif cfg.denoiser == "unet_cond":
         if cfg.enable_gnn:
-            denoiser = ConditionalUnetAttentionGraphDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
-                                                             max_input_dim=salads_dataset.sequence_length,
-                                                             graph_data=pm_graph_data,
-                                                             node_embed_dim=cfg.node_embed_dim,
-                                                             graph_hidden_dim=cfg.graph_hidden,
-                                                             metadata=metadata).to(cfg.device).float()
+            denoiser = ConditionalUnetMatrixDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
+                                                     max_input_dim=salads_dataset.sequence_length,
+                                                     transition_dim=rg_transition_matrix.shape[0]).to(
+                cfg.device).float()
         else:
             denoiser = ConditionalUnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
                                                max_input_dim=salads_dataset.sequence_length).to(cfg.device).float()
@@ -250,11 +265,14 @@ def main():
 
     optimizer = AdamW(denoiser.parameters(), cfg.learning_rate)
     criterion = nn.MSELoss() if cfg.predict_on == 'noise' else nn.CrossEntropyLoss()
+    if cfg.enable_gnn:
+        extra_criterion = nn.CrossEntropyLoss()
     summary = SummaryWriter(cfg.summary_path)
 
     (train_losses, test_losses, test_dist, test_acc, test_precision, tests_recall, test_f1, test_auc, train_acc,
      train_recall, train_precision, train_f1, train_auc, train_dist) = \
-        train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, cfg, summary, logger)
+        train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, rg_transition_matrix,
+              cfg, summary, logger, extra_criterion=extra_criterion)
 
     px.line(train_losses).write_html(os.path.join(cfg.summary_path, "train_loss.html"))
     px.line(test_losses).write_html(os.path.join(cfg.summary_path, "test_losses.html"))

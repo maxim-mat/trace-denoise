@@ -1,5 +1,5 @@
 from typing import Iterable, Tuple
-
+from pm4py.objects.petri_net.utils import reachability_graph
 import networkx as nx
 import torch
 from node2vec import Node2Vec
@@ -62,6 +62,22 @@ def prepare_process_model_for_gnn(process_model: pm4py.PetriNet, init_marking: p
     return data
 
 
+def prepare_process_model_for_gnn_ordered(process_model: pm4py.PetriNet, init_marking: pm4py.Marking,
+                                          final_marking: pm4py.Marking, cfg: Config) -> torch_geometric.data.Data:
+    model_nx = pm4py.convert_petri_net_to_networkx(process_model, init_marking, final_marking)
+    activity_nodes = {t.name for t in process_model.transitions if t.label is not None}
+    activity_ids = {v: int(k) for k, v in cfg.activity_names.items()}
+    node_index = max(activity_ids.items()) + 1
+    for node in model_nx.nodes(data=True):
+        if node[0] in activity_nodes:
+            node[1]['x'] = [activity_ids[node[0]]]
+    for node in model_nx.nodes(data=True):
+        if node[0] not in activity_nodes:
+            node[1]['x'] = [node_index]
+            node_index += 1
+    return from_networkx(model_nx)
+
+
 def prepare_process_model_for_hetero_gnn(process_model: pm4py.PetriNet, init_marking: pm4py.Marking,
                                          final_marking: pm4py.Marking) -> Tuple[torch_geometric.data.HeteroData, Tuple]:
     model_nx = pm4py.convert_petri_net_to_networkx(process_model, init_marking, final_marking)
@@ -99,3 +115,22 @@ def prepare_process_model_for_hetero_gnn(process_model: pm4py.PetriNet, init_mar
     metadata = (['transition', 'place'],
                 [('transition', 'transition_to_place', 'place'), ('place', 'place_to_transition', 'transition')])
     return hetero_data, metadata
+
+
+def get_process_model_reachability_graph_transition_matrix(process_model: pm4py.PetriNet, init_marking: pm4py.Marking):
+    rg = reachability_graph.construct_reachability_graph(process_model, init_marking)
+
+    rg_nx = nx.DiGraph()
+
+    for state in rg.states:
+        rg_nx.add_node(state.name)
+
+    for transition in rg.transitions:
+        rg_nx.add_edge(
+            transition.from_state.name,
+            transition.to_state.name
+        )
+
+    return rg_nx, nx.to_numpy_array(rg_nx, nodelist=sorted(rg_nx.nodes()))
+
+

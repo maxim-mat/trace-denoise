@@ -121,6 +121,8 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, t
         [], [], [], [], [], [], [], []
     train_dist, train_acc, train_precision, train_recall, train_f1, train_auc = [], [], [], [], [], []
     l = len(train_loader)
+    transition_matrix = transition_matrix.unsqueeze(0).unsqueeze(0)
+    # transition_matrix = torch.randn(1, 1, transition_matrix.shape[0], transition_matrix.shape[0])
     best_loss = float('inf')
     denoiser.train()
     for epoch in tqdm(range(cfg.num_epochs)):
@@ -137,7 +139,7 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, t
             if not cfg.enable_gnn:
                 loss = criterion(output, eps) if cfg.predict_on == 'noise' else criterion(output, x)
             else:
-                loss = 0.8 * criterion(output, eps) + \
+                loss = 0.8 * criterion(output, x) + \
                        0.2 * extra_criterion(
                     matrix_hat,
                     transition_matrix.flatten().repeat(matrix_hat.shape[0], 1))

@@ -1,6 +1,6 @@
 {
   "data_path": "../data/pickles/50_salads_unified.pkl",
-  "summary_path": "../runs/\uD83D\uDCA9\uD83D\uDCA9\uD83D\uDCA9",
+  "summary_path": "../runs/debug_mat",
   "device": "cuda",
   "parallelize": false,
   "num_epochs": 3000,

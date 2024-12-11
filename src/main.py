@@ -65,22 +65,18 @@ def evaluate(diffuser, denoiser, criterion, test_loader, transition_matrix, cfg,
         for i, (x, y) in enumerate(test_loader):
             x = x.permute(0, 2, 1).to(cfg.device).float()
             y = y.permute(0, 2, 1).to(cfg.device).float()
-            t = diffuser.sample_timesteps(x.shape[0]).to(cfg.device)
-            x_t, eps = diffuser.noise_data(x, t)
             x_hat = diffuser.sample(denoiser, y.shape[0], cfg.num_classes, denoiser.max_input_dim, y,
                                     cfg.predict_on)
             results_accumulator['x'].append(x)
             results_accumulator['y'].append(y)
             results_accumulator['x_hat'].append(x_hat.permute(0, 2, 1))
-
-            output, matrix_hat = denoiser(x_t, t, y)
             if not cfg.enable_gnn:
-                loss = criterion(output, eps) if cfg.predict_on == 'noise' else criterion(output, x)
+                loss = criterion(x_hat, eps) if cfg.predict_on == 'noise' else criterion(x_hat, x)
             else:
-                loss = 0.8 * criterion(output, eps) + \
+                loss = 0.8 * criterion(x_hat, x) + \
                        0.2 * extra_criterion(
-                    matrix_hat,
-                    transition_matrix.flatten().repeat(matrix_hat.shape[0], 1))
+                    denoiser.transition_matrix,
+                    transition_matrix.flatten().repeat(denoiser.transition_matrix.shape[0], 1))
             total_loss += loss.item()
             summary.add_scalar("MSE_test", loss.item(), global_step=epoch * l + i)
 

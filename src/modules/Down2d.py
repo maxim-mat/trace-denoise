@@ -21,5 +21,5 @@ class Down2d(nn.Module):
 
     def forward(self, x, t):
         x = self.maxpool_conv(x)
-        emb = self.emb_layer(t).unsqueeze(2).repeat(1, 1, x.shape[2])
+        emb = self.emb_layer(t).unsqueeze(2).unsqueeze(2).repeat(1, 1, x.shape[2], x.shape[3])
         return x + emb

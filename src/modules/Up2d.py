@@ -4,9 +4,9 @@ from src.modules.DoubleConv2d import DoubleConv2d
 
 
 class Up2d(nn.Module):
-    def __init__(self, in_channels, out_channels, emb_dim=256):
+    def __init__(self, in_channels, out_channels, emb_dim=256, scale_factor=2):
         super().__init__()
-        self.up = nn.Upsample(scale_factor=2, mode="linear", align_corners=True)
+        self.up = nn.Upsample(scale_factor=scale_factor, mode="bilinear", align_corners=True)
         self.conv = nn.Sequential(
             DoubleConv2d(in_channels, in_channels, residual=True),
             DoubleConv2d(in_channels, out_channels, in_channels // 2),

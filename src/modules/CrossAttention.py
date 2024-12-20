@@ -2,11 +2,11 @@ import torch.nn as nn
 
 
 class CrossAttention(nn.Module):
-    def __init__(self, channels, size):
+    def __init__(self, channels, size, n_heads=2):
         super(CrossAttention, self).__init__()
         self.channels = channels
         self.size = size
-        self.mha = nn.MultiheadAttention(channels, 2, batch_first=True)
+        self.mha = nn.MultiheadAttention(channels, num_heads=n_heads, batch_first=True)
         self.ln = nn.LayerNorm([channels])
         self.ff_cross = nn.Sequential(
             nn.LayerNorm([channels]),
@@ -16,9 +16,9 @@ class CrossAttention(nn.Module):
         )
 
     def forward(self, query, key, value):
-        query = query.view(-1, self.channels, self.size).swapaxes(1, 2)
-        key = key.view(-1, self.channels, self.size).swapaxes(1, 2)
-        value = value.view(-1, self.channels, self.size).swapaxes(1, 2)
+        query = query.swapaxes(1, 2)
+        key = key.swapaxes(1, 2)
+        value = value.swapaxes(1, 2)
 
         query_ln = self.ln(query)
         key_ln = self.ln(key)

@@ -3,10 +3,10 @@ from src.modules.DoubleConv2d import DoubleConv2d
 
 
 class Down2d(nn.Module):
-    def __init__(self, in_channels, out_channels, emb_dim=256):
+    def __init__(self, in_channels, out_channels, emb_dim=256, down_rate=2):
         super().__init__()
         self.maxpool_conv = nn.Sequential(
-            nn.MaxPool2d(2),
+            nn.MaxPool2d(down_rate),
             DoubleConv2d(in_channels, in_channels, residual=True),
             DoubleConv2d(in_channels, out_channels),
         )

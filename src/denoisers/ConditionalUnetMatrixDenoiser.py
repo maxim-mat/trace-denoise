@@ -21,7 +21,7 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
         self.transition_dim = transition_dim
         self.alpha = nn.Parameter(torch.tensor(0.0)).to(device)
         self.transition_matrix = transition_matrix if transition_matrix is not None \
-            else torch.randn(1, in_ch, self.transition_dim, self.transition_dim).to(device)
+            else nn.Parameter(torch.randn(1, in_ch, self.transition_dim, self.transition_dim).to(device))
 
         self.inc = DoubleConv(in_ch, 64)
         self.down1 = Down(64, 128, emb_dim=time_dim)
@@ -77,7 +77,6 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
         self.sa5_mat = SelfAttention(64, (self.transition_dim // 8) ** 2)
         self.up3_mat = Up2d(128, 64, emb_dim=time_dim, scale_factor=8)
         self.sa6_mat = SelfAttention(64, self.transition_dim ** 2)
-        self.up_out_mat = Up2d(64, 1, emb_dim=time_dim)
 
         self.casm1 = CrossAttention(128, max_input_dim // 2)
         self.casm2 = CrossAttention(256, max_input_dim // 4)
@@ -102,6 +101,7 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
 
         # self.outc_mat_linear = nn.Linear(64 * max_input_dim, 64)
         # self.outc_mat = nn.Linear(64, self.transition_dim * self.transition_dim)
+        self.outc_mat = nn.Conv2d(64, out_ch, kernel_size=1)
         self.outc = nn.Conv1d(64, out_ch, kernel_size=1)
 
     def pos_encoding(self, t, channels):
@@ -177,14 +177,11 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
         x = self.up3(x_next_ca, x1, t)
         x = self.sa6(x)
         m = self.up3_mat(m_next_ca, m1, t)
-        m = m.view(1, m.shape[1], -1)
-        m = self.sa6_mat(m)
-        m_ca = self.cams4(m, x, x).view(m.size(0), m.size(1), self.transition_dim, self.transition_dim)
-        x_ca = self.casm4(x, m, m)
 
-        x = self.outc(x_ca)
+        m = self.outc_mat(m)
+        x = self.outc(x)
 
-        return x, m_ca
+        return x, m
 
     def _forward_cond(self, x, y, m, t):
         t = t.unsqueeze(-1).type(torch.float)
@@ -211,8 +208,8 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
         x3 = self.sa2(x3)
         y3 = self.down2_cond(x2_ca + y2_ca, t)
         y3 = self.sa2_cond(y3)
-        m3 = self.down2_mat(m2_ca)
-        m3 = m3.view(1, m3.shape[1], -1)
+        m3 = self.down2_mat(m2_ca, t)
+        m3 = m3.view(batch_dim, m3.shape[1], -1)
         m3 = self.sa2_mat(m3)
         m3_ca = self.cams2(m3, x3 + y3, x3 + y3).view(m3.size(0), m3.size(1),
                                                       self.transition_dim // 16, self.transition_dim // 16)
@@ -223,8 +220,8 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
         x4 = self.sa3(x4)
         y4 = self.down3_cond(x3_ca + y3_ca, t)
         y4 = self.sa3_cond(y4)
-        m4 = self.down2_mat(m3_ca)
-        m4 = m4.view(1, m4.shape[1], -1)
+        m4 = self.down3_mat(m3_ca, t)
+        m4 = m4.view(batch_dim, m4.shape[1], -1)
         m4 = self.sa3_mat(m4)
         m4_ca = self.cams3(m4, x4 + y4, x4 + y4).view(m4.size(0), m4.size(1),
                                                       self.transition_dim // 32, self.transition_dim // 32)
@@ -246,10 +243,10 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
         y = self.up1(x4 + y4, y3_ca, t)
         y = self.sa4_cond(y)
         m = self.up1_mat(m4, m3_ca, t)
-        m = m.view(1, m.shape[1], -1)
+        m = m.view(batch_dim, m.shape[1], -1)
         m = self.sa4_mat(m)
-        m_ca = self.cams4(m, m, x + y).view(m.size(0), m.size(1),
-                                            self.transition_dim // 16, self.transition_dim // 16)
+        m_ca = self.cams4(m, x + y, x + y).view(m.size(0), m.size(1),
+                                                self.transition_dim // 16, self.transition_dim // 16)
         x_ca = self.casm4(x + y, m, m)
         y_ca = self.casm4_cond(x + y, m, m)
 
@@ -258,28 +255,24 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
         y_next = self.up2_cond(x_ca + y_ca, y2_ca, t)
         y_next = self.sa5_cond(y_next)
         m_next = self.up2_mat(m_ca, m2_ca, t)
-        m_next = m_next.view(1, m_next.shape[1], -1)
+        m_next = m_next.view(batch_dim, m_next.shape[1], -1)
         m_next = self.sa5_mat(m_next)
-        m_next_ca = self.cams4(m_next, x_next + y_next, x_next + y_next).view(m.size(0), m.size(1),
+        m_next_ca = self.cams5(m_next, x_next + y_next, x_next + y_next).view(m_next.size(0), m_next.size(1),
                                                                               self.transition_dim // 8,
                                                                               self.transition_dim // 8)
-        x_next_ca = self.casm4(x_next + y_next, m_next, m_next)
-        y_next_ca = self.casm4_cond(x_next + y_next, m_next, m_next)
+        x_next_ca = self.casm5(x_next + y_next, m_next, m_next)
+        y_next_ca = self.casm5_cond(x_next + y_next, m_next, m_next)
 
         x = self.up3(x_next_ca + y_next_ca, x1, t)
         x = self.sa6(x)
         y = self.up3(x_next_ca + y_next_ca, y1, t)
         y = self.sa6(y)
-        m = self.up3_mat(m_next_ca, m1, t)
-        m = m.view(1, m.shape[1], -1)
-        m = self.sa6_mat(m)
-        m_ca = self.cams4(m, x + y, x + y).view(m.size(0), m.size(1), self.transition_dim, self.transition_dim)
-        x_ca = self.casm4(x + y, m, m)
-        y_ca = self.casm4_cond(x + y, m, m)
+        m = self.up3_mat(m_next_ca, m1.repeat(5, 1, 1, 1), t)
 
-        x = self.outc(x_ca + y_ca)
+        m = self.outc_mat(m)
+        x = self.outc(x + y)
 
-        return x, m_ca
+        return x, m
 
     def forward(self, x, t, y=None):
         if y is not None:

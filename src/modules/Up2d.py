@@ -24,5 +24,5 @@ class Up2d(nn.Module):
         x = self.up(x)
         x = torch.cat([skip_x, x], dim=1)
         x = self.conv(x)
-        emb = self.emb_layer(t).unsqueeze(2).repeat(1, 1, x.shape[2])
+        emb = self.emb_layer(t).unsqueeze(2).unsqueeze(2).repeat(1, 1, x.shape[2], x.shape[3])
         return x + emb

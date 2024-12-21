@@ -10,6 +10,7 @@ from torch_geometric.utils import from_networkx
 import torch_geometric
 import pm4py
 from src.utils.Config import Config
+import ast
 
 
 def get_node2vec_features(graph: nx.Graph, cfg: Config) -> Iterable:
@@ -126,6 +127,7 @@ def get_process_model_reachability_graph_transition_matrix(process_model: pm4py.
         rg_nx.add_node(state.name)
 
     for transition in rg.transitions:
+        transition_name = tuple(s.strip(" '") for s in transition.name.strip("()").split(","))
         rg_nx.add_edge(
             transition.from_state.name,
             transition.to_state.name

@@ -57,7 +57,7 @@ class Diffusion:
             for i in reversed(range(1, self.noise_steps)):
                 t_tensor = (torch.ones(n) * i).long().to(self.device)
                 t_prev = (torch.ones(n) * (i - 1)).long().to(self.device)
-                predicted = model(x, t_tensor, y)
+                predicted, _ = model(x, t_tensor, y)
                 alpha = self.alpha[t_tensor][:, None, None]
                 alpha_hat = self.alpha_hat[t_tensor][:, None, None]
                 alpha_hat_prev = self.alpha_hat[t_prev][:, None, None]

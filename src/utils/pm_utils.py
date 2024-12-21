@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import pm4py
 import torch
+import torch.nn.functional as F
 from itertools import groupby
 from src.dataset.dataset import SaladsDataset
 from src.sktr.sktr import convert_dataset_to_df, from_discovered_model_to_PetriNet, recover_single_trace, \
@@ -117,6 +118,26 @@ def evaluate_sktr_on_dataset(dataset: SaladsDataset, model: src.sktr.sktr.PetriN
         )
 
     return recovered_traces
+
+
+def pad_to_multiple_of_n(tensor, n=32):
+    # Get the original spatial dimension (D)
+    _, _, height, width = tensor.shape  # Expecting shape (1, C, D, D)
+
+    # Compute the padding needed to make the dimensions divisible by 32
+    pad_height = (n - height % n) % n
+    pad_width = (n - width % n) % n
+
+    # Since it's a square, pad equally along height and width
+    pad_top = pad_height // 2
+    pad_bottom = pad_height - pad_top
+    pad_left = pad_width // 2
+    pad_right = pad_width - pad_left
+
+    # Apply padding (PyTorch padding order: left, right, top, bottom)
+    padded_tensor = F.pad(tensor, (pad_left, pad_right, pad_top, pad_bottom))
+
+    return padded_tensor
 
 
 def simulate_process_model(process_model: pm4py.PetriNet, init_marking: pm4py.Marking,

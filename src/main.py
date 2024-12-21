@@ -37,7 +37,7 @@ from src.denoisers.ConditionalUnetAttentionGraphDenoiser import ConditionalUnetA
 from src.utils.graph_utils import prepare_process_model_for_hetero_gnn
 from utils.initialization import initialize
 from utils import calculate_metrics
-from utils.pm_utils import discover_dk_process, remove_duplicates_dataset
+from utils.pm_utils import discover_dk_process, remove_duplicates_dataset, pad_to_multiple_of_n
 from utils.graph_utils import prepare_process_model_for_gnn, get_process_model_reachability_graph_transition_matrix
 
 warnings.filterwarnings("ignore")
@@ -223,6 +223,7 @@ def main():
         rg_nx, rg_transition_matrix = get_process_model_reachability_graph_transition_matrix(dk_process_model,
                                                                                              dk_init_marking)
         rg_transition_matrix = torch.tensor(rg_transition_matrix, device=cfg.device).float()
+        rg_transition_matrix = pad_to_multiple_of_n(rg_transition_matrix)
 
     train_loader = DataLoader(
         train_dataset,

@@ -7,7 +7,7 @@
   "learning_rate": 5e-6,
   "num_timesteps": 500,
   "train_percent": 0.75,
-  "num_workers": 6,
+  "num_workers": 2,
   "test_every": 200,
   "denoiser_hidden": 256,
   "denoiser_layers": 2,

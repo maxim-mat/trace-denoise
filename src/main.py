@@ -65,18 +65,20 @@ def evaluate(diffuser, denoiser, criterion, test_loader, transition_matrix, cfg,
         for i, (x, y) in enumerate(test_loader):
             x = x.permute(0, 2, 1).to(cfg.device).float()
             y = y.permute(0, 2, 1).to(cfg.device).float()
-            x_hat = diffuser.sample(denoiser, y.shape[0], cfg.num_classes, denoiser.max_input_dim, y,
-                                    cfg.predict_on)
+            x_hat, matrix_hat = diffuser.sample_with_matrix(denoiser, y.shape[0], cfg.num_classes,
+                                                            denoiser.max_input_dim, transition_matrix.shape[-1],
+                                                            y, cfg.predict_on)
             results_accumulator['x'].append(x)
             results_accumulator['y'].append(y)
             results_accumulator['x_hat'].append(x_hat.permute(0, 2, 1))
             if not cfg.enable_gnn:
                 loss = criterion(x_hat, eps) if cfg.predict_on == 'noise' else criterion(x_hat, x)
             else:
-                loss = 0.8 * criterion(x_hat, x) + \
-                       0.2 * extra_criterion(
-                    denoiser.transition_matrix,
-                    transition_matrix.flatten().repeat(denoiser.transition_matrix.shape[0], 1))
+                loss = 0.99 * criterion(x_hat, x) + \
+                       0.01 * extra_criterion(
+                    matrix_hat.view(x.shape[0], cfg.num_classes + 1, -1),
+                    transition_matrix.view(transition_matrix.size(1), -1).repeat(matrix_hat.shape[0], 1, 1)
+                )
             total_loss += loss.item()
             summary.add_scalar("MSE_test", loss.item(), global_step=epoch * l + i)
 
@@ -117,7 +119,7 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, t
         [], [], [], [], [], [], [], []
     train_dist, train_acc, train_precision, train_recall, train_f1, train_auc = [], [], [], [], [], []
     l = len(train_loader)
-    transition_matrix = transition_matrix.unsqueeze(0).unsqueeze(0)
+    transition_matrix = transition_matrix.unsqueeze(0)
     # transition_matrix = torch.randn(1, 1, transition_matrix.shape[0], transition_matrix.shape[0])
     best_loss = float('inf')
     denoiser.train()
@@ -135,10 +137,11 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, t
             if not cfg.enable_gnn:
                 loss = criterion(output, eps) if cfg.predict_on == 'noise' else criterion(output, x)
             else:
-                loss = 0.8 * criterion(output, x) + \
-                       0.2 * extra_criterion(
-                    matrix_hat,
-                    transition_matrix.flatten().repeat(matrix_hat.shape[0], 1))
+                loss = 0.99 * criterion(output, x) + \
+                       0.01 * extra_criterion(
+                    matrix_hat.view(x.shape[0], cfg.num_classes + 1, -1),
+                    transition_matrix.view(transition_matrix.size(1), -1).repeat(matrix_hat.shape[0], 1, 1)
+                )
             loss.backward()
             optimizer.step()
 
@@ -150,7 +153,7 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, t
             logger.info("testing epoch")
             if cfg.eval_train:
                 denoiser.eval()
-                with torch.no_grad():
+                with (torch.no_grad()):
                     sample_index = random.choice(range(len(train_loader)))
                     for i, batch in enumerate(train_loader):
                         if i == sample_index:
@@ -158,8 +161,10 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, t
                             break
                     x = x.permute(0, 2, 1).to(cfg.device).float()
                     y = y.permute(0, 2, 1).to(cfg.device).float()
-                    x_hat = diffuser.sample(denoiser, y.shape[0], cfg.num_classes, denoiser.max_input_dim, y,
-                                            cfg.predict_on).permute(0, 2, 1)
+                    x_hat, _ = diffuser.sample_with_matrix(denoiser, y.shape[0], cfg.num_classes,
+                                                                    denoiser.max_input_dim,
+                                                                    transition_matrix.shape[-1], y, cfg.predict_on)
+                    x_hat = x_hat.permute(0, 2, 1)
                     x_argmax = torch.argmax(x, dim=1).to('cpu')
                     x_argmax_flat = torch.argmax(x, dim=1).reshape(-1).to('cpu')
                     x_hat_flat = x_hat.reshape(-1, cfg.num_classes).to('cpu')
@@ -247,7 +252,7 @@ def main():
         if cfg.enable_gnn:
             denoiser = ConditionalUnetMatrixDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
                                                      max_input_dim=salads_dataset.sequence_length,
-                                                     transition_dim=rg_transition_matrix.shape[0]).to(
+                                                     transition_dim=rg_transition_matrix.shape[-1]).to(
                 cfg.device).float()
         else:
             denoiser = ConditionalUnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,

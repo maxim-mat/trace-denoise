@@ -21,7 +21,7 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
         self.transition_dim = transition_dim
         self.alpha = nn.Parameter(torch.tensor(0.0)).to(device)
         self.transition_matrix = transition_matrix if transition_matrix is not None \
-            else nn.Parameter(torch.randn(1, in_ch, self.transition_dim, self.transition_dim).to(device))
+            else nn.Parameter(torch.randn(1, in_ch + 1, self.transition_dim, self.transition_dim).to(device))
 
         self.inc = DoubleConv(in_ch, 64)
         self.down1 = Down(64, 128, emb_dim=time_dim)
@@ -61,7 +61,7 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
         self.up3_cond = Up(128, 64, emb_dim=time_dim)
         self.sa6_cond = SelfAttention(64, max_input_dim)
 
-        self.inc_mat = DoubleConv2d(in_ch, 64)
+        self.inc_mat = DoubleConv2d(in_ch + 1, 64)
         self.down1_mat = Down2d(64, 128, emb_dim=time_dim, down_rate=8)
         self.sa1_mat = SelfAttention(128, (self.transition_dim // 8) ** 2)
         self.down2_mat = Down2d(128, 256, emb_dim=time_dim)
@@ -101,7 +101,7 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
 
         # self.outc_mat_linear = nn.Linear(64 * max_input_dim, 64)
         # self.outc_mat = nn.Linear(64, self.transition_dim * self.transition_dim)
-        self.outc_mat = nn.Conv2d(64, out_ch, kernel_size=1)
+        self.outc_mat = nn.Conv2d(64, out_ch + 1, kernel_size=1)
         self.outc = nn.Conv1d(64, out_ch, kernel_size=1)
 
     def pos_encoding(self, t, channels):

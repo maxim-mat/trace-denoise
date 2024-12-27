@@ -122,7 +122,7 @@ def evaluate_sktr_on_dataset(dataset: SaladsDataset, model: src.sktr.sktr.PetriN
 
 def pad_to_multiple_of_n(tensor, n=32):
     # Get the original spatial dimension (D)
-    _, _, height, width = tensor.shape  # Expecting shape (1, C, D, D)
+    _, height, width = tensor.shape  # Expecting shape (1, C, D, D)
 
     # Compute the padding needed to make the dimensions divisible by 32
     pad_height = (n - height % n) % n

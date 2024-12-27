@@ -42,11 +42,11 @@ class Diffusion:
                     noise = torch.zeros_like(x)
                 if denoiser_output == 'noise':
                     x = 1 / torch.sqrt(alpha) * (x - ((1 - alpha) / (torch.sqrt(1 - alpha_hat))) * predicted)
-                    + ((1 - alpha_hat_prev)/(1 - alpha_hat)) * torch.sqrt(beta) * noise
+                    + ((1 - alpha_hat_prev) / (1 - alpha_hat)) * torch.sqrt(beta) * noise
                 elif denoiser_output == 'original':
                     x = (torch.sqrt(alpha_hat_prev) / (1 - alpha_hat)) * predicted
-                    + ((torch.sqrt(alpha) * (1 - alpha_hat_prev))/(1 - alpha_hat)) * x
-                    + ((1 - alpha_hat_prev)/(1 - alpha_hat)) * torch.sqrt(beta) * noise
+                    + ((torch.sqrt(alpha) * (1 - alpha_hat_prev)) / (1 - alpha_hat)) * x
+                    + ((1 - alpha_hat_prev) / (1 - alpha_hat)) * torch.sqrt(beta) * noise
         model.train()
         return x
 
@@ -57,7 +57,7 @@ class Diffusion:
             for i in reversed(range(1, self.noise_steps)):
                 t_tensor = (torch.ones(n) * i).long().to(self.device)
                 t_prev = (torch.ones(n) * (i - 1)).long().to(self.device)
-                predicted, _ = model(x, t_tensor, y)
+                predicted = model(x, t_tensor, y)
                 alpha = self.alpha[t_tensor][:, None, None]
                 alpha_hat = self.alpha_hat[t_tensor][:, None, None]
                 alpha_hat_prev = self.alpha_hat[t_prev][:, None, None]
@@ -68,10 +68,45 @@ class Diffusion:
                     noise = torch.zeros_like(x)
                 if denoiser_output == 'noise':
                     x = 1 / torch.sqrt(alpha) * (x - ((1 - alpha) / (torch.sqrt(1 - alpha_hat))) * predicted)
-                    + ((1 - alpha_hat_prev)/(1 - alpha_hat)) * torch.sqrt(beta) * noise
+                    + ((1 - alpha_hat_prev) / (1 - alpha_hat)) * torch.sqrt(beta) * noise
                 elif denoiser_output == 'original':
                     x = (torch.sqrt(alpha_hat_prev) / (1 - alpha_hat)) * predicted
-                    + ((torch.sqrt(alpha) * (1 - alpha_hat_prev))/(1 - alpha_hat)) * x
-                    + ((1 - alpha_hat_prev)/(1 - alpha_hat)) * torch.sqrt(beta) * noise
+                    + ((torch.sqrt(alpha) * (1 - alpha_hat_prev)) / (1 - alpha_hat)) * x
+                    + ((1 - alpha_hat_prev) / (1 - alpha_hat)) * torch.sqrt(beta) * noise
         model.train()
         return x
+
+    def sample_with_matrix(self, model, n, num_categories, sequence_length, transition_dim, y=None,
+                           denoiser_output='noise'):
+        model.eval()
+        with torch.no_grad():
+            x = torch.randn((n, num_categories, sequence_length)).to(self.device)
+            m = torch.randn((num_categories, transition_dim, transition_dim)).to(self.device)
+            for i in reversed(range(1, self.noise_steps)):
+                t_tensor = (torch.ones(n) * i).long().to(self.device)
+                t_prev = (torch.ones(n) * (i - 1)).long().to(self.device)
+                predicted, matrix_hat = model(x, t_tensor, y)
+                alpha = self.alpha[t_tensor][:, None, None]
+                alpha_hat = self.alpha_hat[t_tensor][:, None, None]
+                alpha_hat_prev = self.alpha_hat[t_prev][:, None, None]
+                beta = self.beta[t_tensor][:, None, None]
+                mat_alpha = self.alpha[t_tensor][:, None, None, None]
+                mat_alpha_hat = self.alpha_hat[t_tensor][:, None, None, None]
+                mat_alpha_hat_prev = self.alpha_hat[t_prev][:, None, None, None]
+                mat_beta = self.beta[t_tensor][:, None, None, None]
+                if i > 1:
+                    noise = torch.randn_like(x)
+                else:
+                    noise = torch.zeros_like(x)
+                if denoiser_output == 'noise':
+                    x = 1 / torch.sqrt(alpha) * (x - ((1 - alpha) / (torch.sqrt(1 - alpha_hat))) * predicted)
+                    + ((1 - alpha_hat_prev) / (1 - alpha_hat)) * torch.sqrt(beta) * noise
+                elif denoiser_output == 'original':
+                    x = (torch.sqrt(alpha_hat_prev) / (1 - alpha_hat)) * predicted
+                    + ((torch.sqrt(alpha) * (1 - alpha_hat_prev)) / (1 - alpha_hat)) * x
+                    + ((1 - alpha_hat_prev) / (1 - alpha_hat)) * torch.sqrt(beta) * noise
+                    m = (torch.sqrt(mat_alpha_hat_prev) / (1 - mat_alpha_hat)) * matrix_hat
+                    + ((torch.sqrt(mat_alpha) * (1 - mat_alpha_hat_prev)) / (1 - mat_alpha_hat)) * m
+                    + ((1 - mat_alpha_hat_prev) / (1 - mat_alpha_hat)) * torch.sqrt(mat_beta) * noise
+        model.train()
+        return x, m

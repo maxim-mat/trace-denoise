@@ -7,11 +7,11 @@ import pm4py
 import torch
 import torch.nn.functional as F
 from itertools import groupby
-from src.dataset.dataset import SaladsDataset
-from src.sktr.sktr import convert_dataset_to_df, from_discovered_model_to_PetriNet, recover_single_trace, \
+from dataset.dataset import SaladsDataset
+from sktr.sktr import convert_dataset_to_df, from_discovered_model_to_PetriNet, recover_single_trace, \
     sfmx_mat_to_sk_trace
-import src.sktr.sktr
-from src.utils import Config
+import sktr.sktr
+from utils import Config
 
 
 def prepare_df_cols_for_discovery(df):

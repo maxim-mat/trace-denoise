@@ -1,5 +1,5 @@
 import torch.nn as nn
-from src.modules.DoubleConv2d import DoubleConv2d
+from modules.DoubleConv2d import DoubleConv2d
 
 
 class Down2d(nn.Module):

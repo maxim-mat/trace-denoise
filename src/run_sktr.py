@@ -2,7 +2,7 @@ import os
 
 from sklearn.model_selection import train_test_split
 
-from src.dataset.dataset import SaladsDataset
+from dataset.dataset import SaladsDataset
 from utils import initialize, train_sktr, evaluate_sktr_on_dataset
 
 import pickle as pkl

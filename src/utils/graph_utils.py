@@ -9,7 +9,7 @@ from torch_geometric.data import HeteroData
 from torch_geometric.utils import from_networkx
 import torch_geometric
 import pm4py
-from src.utils.Config import Config
+from utils.Config import Config
 import ast
 
 

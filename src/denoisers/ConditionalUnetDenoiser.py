@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
-from src.modules.DoubleConv import DoubleConv
-from src.modules.Up import Up
-from src.modules.Down import Down
-from src.modules.SelfAttention import SelfAttention
+from modules.DoubleConv import DoubleConv
+from modules.Up import Up
+from modules.Down import Down
+from modules.SelfAttention import SelfAttention
 
 
 class ConditionalUnetDenoiser(nn.Module):

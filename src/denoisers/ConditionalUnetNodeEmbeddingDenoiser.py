@@ -2,11 +2,11 @@ import torch
 import torch.nn as nn
 import torch_geometric
 
-from src.modules.DoubleConv import DoubleConv
-from src.modules.SelfAttention import SelfAttention
-from src.modules.Down import Down
-from src.modules.Up import Up
-from src.modules.GraphNodeEncoder import GraphNodeEncoder
+from modules.DoubleConv import DoubleConv
+from modules.SelfAttention import SelfAttention
+from modules.Down import Down
+from modules.Up import Up
+from modules.GraphNodeEncoder import GraphNodeEncoder
 
 
 class ConditionalUnetNodeEmbeddingDenoiser(nn.Module):

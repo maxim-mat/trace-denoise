@@ -2,12 +2,12 @@ import torch
 import torch.nn as nn
 import torch_geometric
 
-from src.modules.DoubleConv import DoubleConv
-from src.modules.SelfAttention import SelfAttention
-from src.modules.GraphUp import GraphUp
-from src.modules.GraphDown import GraphDown
-from src.modules.Down import Down
-from src.modules.Up import Up
+from modules.DoubleConv import DoubleConv
+from modules.SelfAttention import SelfAttention
+from modules.GraphUp import GraphUp
+from modules.GraphDown import GraphDown
+from modules.Down import Down
+from modules.Up import Up
 
 
 class ConditionalUnetGraphDenoiser(nn.Module):

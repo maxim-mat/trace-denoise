@@ -1,14 +1,14 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from src.modules.DoubleConv import DoubleConv
-from src.modules.DoubleConv2d import DoubleConv2d
-from src.modules.Up import Up
-from src.modules.Up2d import Up2d
-from src.modules.Down import Down
-from src.modules.Down2d import Down2d
-from src.modules.SelfAttention import SelfAttention
-from src.modules.CrossAttention import CrossAttention
+from modules.DoubleConv import DoubleConv
+from modules.DoubleConv2d import DoubleConv2d
+from modules.Up import Up
+from modules.Up2d import Up2d
+from modules.Down import Down
+from modules.Down2d import Down2d
+from modules.SelfAttention import SelfAttention
+from modules.CrossAttention import CrossAttention
 
 
 class ConditionalUnetMatrixDenoiser(nn.Module):

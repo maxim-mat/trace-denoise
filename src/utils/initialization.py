@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import pickle as pkl
-from src.utils.Config import Config
+from utils.Config import Config
 
 
 def parse_args():

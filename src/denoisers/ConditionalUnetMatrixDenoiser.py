@@ -19,7 +19,7 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
         self.time_dim = time_dim
         self.max_input_dim = max_input_dim
         self.transition_dim = transition_dim
-        self.alpha = nn.Parameter(torch.tensor(0.0)).to(device)
+        self.alpha = nn.Parameter(torch.rand(1)).float().to(device)
         self.transition_matrix = transition_matrix if transition_matrix is not None \
             else nn.Parameter(torch.randn(1, in_ch + 1, self.transition_dim, self.transition_dim).to(device))
 
@@ -124,7 +124,7 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
 
         x2 = self.down1(x1, t)
         x2 = self.sa1(x2)
-        m2 = self.down1_mat(m1)
+        m2 = self.down1_mat(m1, t)
         m2 = m2.view(1, m2.shape[1], -1)
         m2 = self.sa1_mat(m2)
         m2_ca = self.cams1(m2, x2, x2).view(m2.size(0), m2.size(1),
@@ -133,7 +133,7 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
 
         x3 = self.down2(x2_ca, t)
         x3 = self.sa2(x3)
-        m3 = self.down2_mat(m2_ca)
+        m3 = self.down2_mat(m2_ca, t)
         m3 = m3.view(1, m3.shape[1], -1)
         m3 = self.sa2_mat(m3)
         m3_ca = self.cams2(m3, x3, x3).view(m3.size(0), m3.size(1),
@@ -142,7 +142,7 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
 
         x4 = self.down3(x3_ca, t)
         x4 = self.sa3(x4)
-        m4 = self.down2_mat(m3_ca)
+        m4 = self.down3_mat(m3_ca, t)
         m4 = m4.view(1, m4.shape[1], -1)
         m4 = self.sa3_mat(m4)
         m4_ca = self.cams3(m4, x4, x4).view(m4.size(0), m4.size(1),
@@ -170,13 +170,14 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
         m_next = self.up2_mat(m_ca, m2_ca, t)
         m_next = m_next.view(1, m_next.shape[1], -1)
         m_next = self.sa5_mat(m_next)
-        m_next_ca = self.cams4(m_next, x_next, x_next).view(m.size(0), m.size(1),
-                                                            self.transition_dim // 8, self.transition_dim // 8)
-        x_next_ca = self.casm4(x_next, m_next, m_next)
+        m_next_ca = self.cams5(m_next, x_next, x_next).view(m_next.size(0), m_next.size(1),
+                                                                              self.transition_dim // 8,
+                                                                              self.transition_dim // 8)
+        x_next_ca = self.casm5(x_next, m_next, m_next)
 
         x = self.up3(x_next_ca, x1, t)
         x = self.sa6(x)
-        m = self.up3_mat(m_next_ca, m1, t)
+        m = self.up3_mat(m_next_ca, m1.repeat(x.shape[0], 1, 1, 1), t)
 
         m = self.outc_mat(m)
         x = self.outc(x)
@@ -267,7 +268,7 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
         x = self.sa6(x)
         y = self.up3(x_next_ca + y_next_ca, y1, t)
         y = self.sa6(y)
-        m = self.up3_mat(m_next_ca, m1.repeat(5, 1, 1, 1), t)
+        m = self.up3_mat(m_next_ca, m1.repeat(x.shape[0], 1, 1, 1), t)
 
         m = self.outc_mat(m)
         x = self.outc(x + y)

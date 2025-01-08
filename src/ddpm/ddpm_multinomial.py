@@ -105,8 +105,6 @@ class Diffusion:
                     x = (torch.sqrt(alpha_hat_prev) / (1 - alpha_hat)) * predicted
                     + ((torch.sqrt(alpha) * (1 - alpha_hat_prev)) / (1 - alpha_hat)) * x
                     + ((1 - alpha_hat_prev) / (1 - alpha_hat)) * torch.sqrt(beta) * noise
-                    m = (torch.sqrt(mat_alpha_hat_prev) / (1 - mat_alpha_hat)) * matrix_hat
-                    + ((torch.sqrt(mat_alpha) * (1 - mat_alpha_hat_prev)) / (1 - mat_alpha_hat)) * m
-                    + ((1 - mat_alpha_hat_prev) / (1 - mat_alpha_hat)) * torch.sqrt(mat_beta) * noise
+                    m = matrix_hat
         model.train()
         return x, m

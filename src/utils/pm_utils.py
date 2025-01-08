@@ -59,7 +59,7 @@ def subsample_time_series(trace_data: dict, num_indexes: int, axis: int = 0):
     return {'target': dk_sample, 'stochastic': sk_sample}, sample_indexes
 
 
-def train_sktr(dataset: SaladsDataset, cfg: Config) -> src.sktr.sktr.PetriNet:
+def train_sktr(dataset: SaladsDataset, cfg: Config) -> sktr.sktr.PetriNet:
     """
     run process discovery on the train dataset
     :param dataset: train dataset
@@ -106,7 +106,7 @@ def process_sk_trace(sk_trace: pd.DataFrame, activity_names, round_precision, mo
     return recovered_trace
 
 
-def evaluate_sktr_on_dataset(dataset: SaladsDataset, model: src.sktr.sktr.PetriNet, cfg: Config):
+def evaluate_sktr_on_dataset(dataset: SaladsDataset, model: sktr.sktr.PetriNet, cfg: Config):
     stochastic_traces_matrices = convert_dataset_to_stochastic_traces(dataset, cfg)
     args_list = [
         (sk_trace, cfg.activity_names, cfg.round_precision, model, 1)

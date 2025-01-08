@@ -1,7 +1,7 @@
 {
   "data_path": "../data/pickles/50_salads_unified.pkl",
-  "summary_path": "../runs/debug_mat",
-  "device": "cuda",
+  "summary_path": "../runs/matrix_cond_50_salads_500ts",
+  "device": "cuda:1",
   "parallelize": false,
   "num_epochs": 3000,
   "learning_rate": 5e-6,
@@ -12,7 +12,7 @@
   "denoiser_hidden": 256,
   "denoiser_layers": 2,
   "num_classes": 20,
-  "batch_size": 5,
+  "batch_size": 3,
   "conditional_dropout": 0.1,
   "denoiser": "unet_cond",
   "eval_train": true,

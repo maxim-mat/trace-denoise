@@ -4,6 +4,8 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 import pm4py
+from pm4py.algo.conformance.alignments.petri_net import algorithm as alignments
+from pm4py.objects.conversion.log import converter
 import torch
 import torch.nn.functional as F
 from itertools import groupby
@@ -138,6 +140,23 @@ def pad_to_multiple_of_n(tensor, n=32):
     padded_tensor = F.pad(tensor, (pad_left, pad_right, pad_top, pad_bottom))
 
     return padded_tensor
+
+
+def list_to_traces(traces_list, activity_names):
+    df_deterministic = pd.DataFrame(
+        {
+            'concept:name': [activity_names[i] for trace in traces_list for i in trace],
+            'case:concept:name': [str(i) for i, trace in enumerate(traces_list) for _ in range(len(trace))]
+        }
+    )
+
+    return prepare_df_cols_for_discovery(df_deterministic)
+
+
+def conformance_measure(traces, process_model, initial_marking, final_marking, activity_names):
+    df_traces = list_to_traces(traces, activity_names)
+    log = converter.apply(df_traces)
+    return alignments.apply_log(log, process_model, initial_marking, final_marking)
 
 
 def simulate_process_model(process_model: pm4py.PetriNet, init_marking: pm4py.Marking,

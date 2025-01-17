@@ -84,9 +84,9 @@ def evaluate(diffuser, denoiser, criterion, test_loader, transition_matrix, cfg,
                 )
             first_loss_item = (a_clamped * criterion(x_hat, x)).item()
             second_loss_item = ((1 - a_clamped) * extra_criterion(
-                    matrix_hat.view(x.shape[0], cfg.num_classes + 1, -1),
-                    transition_matrix.view(transition_matrix.size(1), -1).repeat(matrix_hat.shape[0], 1, 1)
-                )).item()
+                matrix_hat.view(x.shape[0], cfg.num_classes + 1, -1),
+                transition_matrix.view(transition_matrix.size(1), -1).repeat(matrix_hat.shape[0], 1, 1)
+            )).item()
             total_loss += loss.item()
             first_loss += first_loss_item
             second_loss += second_loss_item
@@ -104,14 +104,14 @@ def evaluate(diffuser, denoiser, criterion, test_loader, transition_matrix, cfg,
         x_hat_argmax_flat = torch.argmax(x_hat_prob_flat, dim=1).to('cpu')
         x_hat_prob = torch.softmax(x_hat_logit, dim=1).to('cpu')
         x_hat_argmax = torch.argmax(x_hat_prob, dim=1)
-        
+
         try:
-          auc = roc_auc_score(x_argmax_flat, x_hat_prob_flat, multi_class='ovr', average='macro')
+            auc = roc_auc_score(x_argmax_flat, x_hat_prob_flat, multi_class='ovr', average='macro')
         except ValueError:
-          logger.info("excuse me wtf")
-          auc = -1
-          with open(os.path.join(cfg.summary_path, f"test_epoch_{epoch}_auc_error.pkl"), "wb") as f:
-            pkl.dump({"x_argmax_flat": x_argmax_flat, "x_hat_prob_flat": x_hat_prob_flat}, f)
+            logger.info("excuse me wtf")
+            auc = -1
+            with open(os.path.join(cfg.summary_path, f"test_epoch_{epoch}_auc_error.pkl"), "wb") as f:
+                pkl.dump({"x_argmax_flat": x_argmax_flat, "x_hat_prob_flat": x_hat_prob_flat}, f)
         w2 = np.mean([wasserstein_distance(xi, xhi) for xi, xhi in zip(x_argmax, x_hat_argmax)])
         accuracy = accuracy_score(x_argmax_flat, x_hat_argmax_flat)
         precision = precision_score(x_argmax_flat, x_hat_argmax_flat, average='macro', zero_division=0)
@@ -131,7 +131,8 @@ def evaluate(diffuser, denoiser, criterion, test_loader, transition_matrix, cfg,
         summary.add_scalar("auc_test", auc, global_step=epoch * l)
         summary.add_scalar("alpha", torch.sigmoid(denoiser.alpha), global_step=epoch * l)
         denoiser.train()
-    return average_loss, accuracy, recall, precision, f1, auc, w2, average_first_loss, average_second_loss, torch.sigmoid(denoiser.alpha)
+    return average_loss, accuracy, recall, precision, f1, auc, w2, average_first_loss, average_second_loss, torch.sigmoid(
+        denoiser.alpha)
 
 
 def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, transition_matrix, cfg, summary, logger,
@@ -143,10 +144,10 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, t
     train_alpha, test_alpha = [], []
     l = len(train_loader)
     transition_matrix = transition_matrix.unsqueeze(0)
-    # transition_matrix = torch.randn(1, 1, transition_matrix.shape[0], transition_matrix.shape[0])
     best_loss = float('inf')
     denoiser.train()
     for epoch in tqdm(range(cfg.num_epochs)):
+        l_matrix = 0  # how many times matrix loss was calculated because it's dropped out sometimes
         epoch_loss = 0.0
         epoch_first_loss = 0.0
         epoch_second_loss = 0.0
@@ -155,37 +156,27 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, t
             x = x.permute(0, 2, 1).to(cfg.device).float()
             y = y.permute(0, 2, 1).to(cfg.device).float()
             t = diffuser.sample_timesteps(x.shape[0]).to(cfg.device)
+            drop_matrix = False
             x_t, eps = diffuser.noise_data(x, t)  # each item in batch gets different level of noise based on timestep
             if np.random.random() < cfg.conditional_dropout:
                 y = None
-            output, matrix_hat = denoiser(x_t, t, y)
-            if not cfg.enable_gnn:
-                loss = criterion(output, eps) if cfg.predict_on == 'noise' else criterion(output, x)
-            else:
-                a_clamped = torch.sigmoid(denoiser.alpha)
-                loss = a_clamped * criterion(output, x) + \
-                       (1 - a_clamped) * extra_criterion(
-                    matrix_hat.view(x.shape[0], cfg.num_classes + 1, -1),
-                    transition_matrix.view(transition_matrix.size(1), -1).repeat(matrix_hat.shape[0], 1, 1)
-                )
+            if np.random.random() < cfg.matrix_dropout:
+                drop_matrix = True
+            output, matrix_hat, loss, seq_loss, mat_loss = denoiser(x_t, t, y, drop_matrix)
             loss.backward()
             optimizer.step()
 
-            summary.add_scalar("loss_train", loss.item(), global_step=epoch * l + i)
+            summary.add_scalar("train loss", loss.item(), global_step=epoch * l + i)
             epoch_loss += loss.item()
-            
-            first_loss_item = (a_clamped * criterion(output, x)).item()
-            second_loss_item = ((1 - a_clamped) * extra_criterion(
-                    matrix_hat.view(x.shape[0], cfg.num_classes + 1, -1),
-                    transition_matrix.view(transition_matrix.size(1), -1).repeat(matrix_hat.shape[0], 1, 1)
-                )).item()
-            epoch_first_loss += first_loss_item
-            epoch_second_loss += second_loss_item
-            summary.add_scalar("first_loss_train", first_loss_item, global_step=epoch * l + i)
-            summary.add_scalar("second_loss_train", second_loss_item, global_step=epoch * l + i)
+            epoch_first_loss += seq_loss
+            epoch_second_loss += mat_loss
+            summary.add_scalar("sequence loss", seq_loss, global_step=epoch * l + i)
+            if mat_loss != 0:
+                l_matrix += 1
+                summary.add_scalar("matrix loss", mat_loss, global_step=epoch * l + i)
         train_losses.append(epoch_loss / l)
         train_l1.append(epoch_first_loss / l)
-        train_l2.append(epoch_second_loss / l)
+        train_l2.append(epoch_second_loss / l_matrix)
         train_alpha.append(torch.sigmoid(denoiser.alpha))
 
         if epoch % cfg.test_every == 0:
@@ -200,10 +191,10 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, t
                             break
                     x = x.permute(0, 2, 1).to(cfg.device).float()
                     y = y.permute(0, 2, 1).to(cfg.device).float()
-                    x_hat, _ = diffuser.sample_with_matrix(denoiser, y.shape[0], cfg.num_classes,
-                                                                    denoiser.max_input_dim,
-                                                                    transition_matrix.shape[-1], y, cfg.predict_on)
-                    x_hat = x_hat.permute(0, 2, 1)
+                    output, matrix_hat, loss, seq_loss, mat_loss = \
+                        diffuser.sample_with_matrix(denoiser, y.shape[0], cfg.num_classes, denoiser.max_input_dim,
+                                                    transition_matrix.shape[-1], y, cfg.predict_on)
+                    x_hat = output.permute(0, 2, 1)
                     x_argmax = torch.argmax(x, dim=1).to('cpu')
                     x_argmax_flat = torch.argmax(x, dim=1).reshape(-1).to('cpu')
                     x_hat_flat = x_hat.reshape(-1, cfg.num_classes).to('cpu')
@@ -212,12 +203,12 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, t
                     x_hat_prob = torch.softmax(x_hat, dim=1).to('cpu')
                     x_hat_argmax = torch.argmax(x_hat_prob, dim=1)
                     try:
-                      auc = roc_auc_score(x_argmax_flat, x_hat_prob_flat, multi_class='ovr', average='micro')
+                        auc = roc_auc_score(x_argmax_flat, x_hat_prob_flat, multi_class='ovr', average='micro')
                     except ValueError:
-                      logger.info("excuse me wtf")
-                      auc = -1
-                      with open(os.path.join(cfg.summary_path, f"train_epoch_{epoch}_auc_error.pkl"), "wb") as f:
-                        pkl.dump({"x_argmax_flat": x_argmax_flat, "x_hat_prob_flat": x_hat_prob_flat}, f)
+                        logger.info("excuse me wtf")
+                        auc = -1
+                        with open(os.path.join(cfg.summary_path, f"train_epoch_{epoch}_auc_error.pkl"), "wb") as f:
+                            pkl.dump({"x_argmax_flat": x_argmax_flat, "x_hat_prob_flat": x_hat_prob_flat}, f)
                     w2 = np.mean([wasserstein_distance(xi, xhi) for xi, xhi in zip(x_argmax, x_hat_argmax)])
                     accuracy = accuracy_score(x_argmax_flat, x_hat_argmax_flat)
                     precision = precision_score(x_argmax_flat, x_hat_argmax_flat, average='macro', zero_division=0)
@@ -240,8 +231,11 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, t
                 denoiser.train()
 
             test_epoch_loss, test_epoch_acc, test_epoch_recall, test_epoch_precision, test_epoch_f1, test_epoch_auc, \
-                test_epoch_dist, test_epoch_l1, test_epoch_l2, test_alpha_clamp = evaluate(diffuser, denoiser, criterion, test_loader, transition_matrix, cfg, summary,
-                                                                                      epoch, extra_criterion)
+                test_epoch_dist, test_epoch_l1, test_epoch_l2, test_alpha_clamp = evaluate(diffuser, denoiser,
+                                                                                           criterion, test_loader,
+                                                                                           transition_matrix, cfg,
+                                                                                           summary,
+                                                                                           epoch, extra_criterion)
             test_dist.append(test_epoch_dist)
             test_losses.append(test_epoch_loss)
             test_acc.append(test_epoch_acc)
@@ -258,7 +252,8 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, t
             best_loss = test_epoch_loss if test_epoch_loss < best_loss else best_loss
 
     return (train_losses, test_losses, test_dist, test_acc, test_precision, test_recall, test_f1, test_auc,
-            train_acc, train_recall, train_precision, train_f1, train_auc, train_dist, train_l1, train_l2, test_l1, test_l2, train_alpha, test_alpha)
+            train_acc, train_recall, train_precision, train_f1, train_auc, train_dist, train_l1, train_l2, test_l1,
+            test_l2, train_alpha, test_alpha)
 
 
 def main():
@@ -300,7 +295,8 @@ def main():
         if cfg.enable_gnn:
             denoiser = ConditionalUnetMatrixDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
                                                      max_input_dim=salads_dataset.sequence_length,
-                                                     transition_dim=rg_transition_matrix.shape[-1], device=cfg.device).to(
+                                                     transition_dim=rg_transition_matrix.shape[-1],
+                                                     device=cfg.device).to(
                 cfg.device).float()
         else:
             denoiser = ConditionalUnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
@@ -322,7 +318,8 @@ def main():
     summary = SummaryWriter(cfg.summary_path)
 
     (train_losses, test_losses, test_dist, test_acc, test_precision, tests_recall, test_f1, test_auc, train_acc,
-     train_recall, train_precision, train_f1, train_auc, train_dist, train_l1, train_l2, test_l1, test_l2, train_alpha, test_alpha) = \
+     train_recall, train_precision, train_f1, train_auc, train_dist, train_l1, train_l2, test_l1, test_l2, train_alpha,
+     test_alpha) = \
         train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, rg_transition_matrix,
               cfg, summary, logger, extra_criterion=extra_criterion)
 

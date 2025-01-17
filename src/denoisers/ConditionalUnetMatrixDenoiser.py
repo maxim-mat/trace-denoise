@@ -346,15 +346,15 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
         return x
 
     def forward(self, x, t, gt_x, gt_m, y=None, drop_matrix=False):
-        matrix_loss = None
+        matrix_loss = 0
         m_hat = None
         if not drop_matrix:
             if y is not None:
                 x_hat, m_hat = self._forward_cond_mat(x, y, self.transition_matrix, t)
             else:
                 x_hat, m_hat = self._forward_uncond_mat(x, self.transition_matrix, t)
-            matrix_loss = self.matrix_loss(m_hat.view(x.shape[0], self.num_classes + 1, -1),
-                                           gt_m.view(gt_m.size(1), -1).repeat(m_hat.shape[0], 1, 1))
+                matrix_loss = self.matrix_loss(m_hat.view(x.shape[0], self.num_classes + 1, -1),
+                                               gt_m.view(gt_m.size(1), -1).repeat(m_hat.shape[0], 1, 1))
         else:
             if y is not None:
                 x_hat = self._forward_cond_no_mat(x, y, t)
@@ -366,5 +366,5 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
             final_loss = alpha_clamped * sequence_loss + (1 - alpha_clamped) * matrix_loss
         else:
             final_loss = sequence_loss
-
-        return x_hat, m_hat, final_loss, sequence_loss.item(), matrix_loss.item()
+        matrix_loss = matrix_loss.item() if matrix_loss != 0 else matrix_loss
+        return x_hat, m_hat, final_loss, sequence_loss.item(), matrix_loss

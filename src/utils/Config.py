@@ -20,6 +20,7 @@ class Config:
     eval_train: bool = None
     predict_on: str = None
     conditional_dropout: float = None
+    matrix_dropot: float = None
     mode: str = None
     train_percent: float = None
     seed: int = None

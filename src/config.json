@@ -14,6 +14,7 @@
   "num_classes": 20,
   "batch_size": 3,
   "conditional_dropout": 0.1,
+  "matrix_dropout": 0.1,
   "denoiser": "unet_cond",
   "eval_train": true,
   "mode": "cond",

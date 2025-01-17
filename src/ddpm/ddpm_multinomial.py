@@ -90,10 +90,6 @@ class Diffusion:
                 alpha_hat = self.alpha_hat[t_tensor][:, None, None]
                 alpha_hat_prev = self.alpha_hat[t_prev][:, None, None]
                 beta = self.beta[t_tensor][:, None, None]
-                mat_alpha = self.alpha[t_tensor][:, None, None, None]
-                mat_alpha_hat = self.alpha_hat[t_tensor][:, None, None, None]
-                mat_alpha_hat_prev = self.alpha_hat[t_prev][:, None, None, None]
-                mat_beta = self.beta[t_tensor][:, None, None, None]
                 if i > 1:
                     noise = torch.randn_like(x)
                 else:

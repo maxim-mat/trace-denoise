@@ -12,6 +12,50 @@ from modules.CrossAttention import CrossAttention
 
 
 class ConditionalUnetMatrixDenoiser(nn.Module):
+    """
+    ConditionalUnetMatrixDenoiser is a neural network module that implements a conditional U-Net architecture 
+    with self-attention and cross-attention mechanisms for denoising tasks. It supports both conditional and 
+    unconditional denoising, with or without transition matrices.
+    Args:
+        in_ch (int): Number of input channels.
+        out_ch (int): Number of output channels.
+        max_input_dim (int): Maximum input dimension.
+        transition_dim (int): Dimension of the transition matrix.
+        transition_matrix (torch.Tensor, optional): Predefined transition matrix. Defaults to None.
+        time_dim (int, optional): Dimension of the time embedding. Defaults to 128.
+        device (str, optional): Device to run the model on. Defaults to "cuda".
+    Attributes:
+        device (str): Device to run the model on.
+        time_dim (int): Dimension of the time embedding.
+        num_classes (int): Number of input channels.
+        max_input_dim (int): Maximum input dimension.
+        transition_dim (int): Dimension of the transition matrix.
+        alpha (torch.nn.Parameter): Hybrid loss scale parameter.
+        transition_matrix (torch.nn.Parameter): Transition matrix.
+        sequence_loss (torch.nn.CrossEntropyLoss): Loss function for sequence prediction.
+        matrix_loss (torch.nn.CrossEntropyLoss): Loss function for matrix prediction.
+        inc, down1, sa1, down2, sa2, down3, sa3, bot1, bot2, bot3, up1, sa4, up2, sa5, up3, sa6: Layers for the U-Net architecture.
+        inc_cond, down1_cond, sa1_cond, down2_cond, sa2_cond, down3_cond, sa3_cond, bot1_cond, bot2_cond, bot3_cond, up1_cond, sa4_cond, up2_cond, sa5_cond, up3_cond, sa6_cond: Layers for the conditional U-Net architecture.
+        inc_mat, down1_mat, sa1_mat, down2_mat, sa2_mat, down3_mat, sa3_mat, bot1_mat, bot2_mat, bot3_mat, up1_mat, sa4_mat, up2_mat, sa5_mat, up3_mat, sa6_mat: Layers for the matrix U-Net architecture.
+        casm1, casm2, casm3, casm4, casm5, casm6: Cross-attention layers for the U-Net architecture.
+        casm1_cond, casm2_cond, casm3_cond, casm4_cond, casm5_cond, casm6_cond: Cross-attention layers for the conditional U-Net architecture.
+        cams1, cams2, cams3, cams4, cams5, cams6: Cross-attention layers for the matrix U-Net architecture.
+        outc_mat (torch.nn.Conv2d): Output convolutional layer for the matrix.
+        outc (torch.nn.Conv1d): Output convolutional layer for the sequence.
+    Methods:
+        pos_encoding(t, channels):
+            Generates positional encoding for the given time step and number of channels.
+        _forward_uncond_mat(x, m, t):
+            Forward pass for unconditional denoising with transition matrix.
+        _forward_cond_mat(x, y, m, t):
+            Forward pass for conditional denoising with transition matrix.
+        _forward_uncond_no_mat(x, t):
+            Forward pass for unconditional denoising without transition matrix.
+        _forward_cond_no_mat(x, y, t):
+            Forward pass for conditional denoising without transition matrix.
+        forward(x, t, gt_x, gt_m, y=None, drop_matrix=False):
+            Main forward pass method. Computes the denoised output and loss.
+    """
     def __init__(self, in_ch, out_ch, max_input_dim, transition_dim, transition_matrix=None, time_dim=128,
                  device="cuda"):
         super().__init__()
@@ -346,25 +390,27 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
         return x
 
     def forward(self, x, t, gt_x, gt_m, y=None, drop_matrix=False):
-        matrix_loss = 0
+        matrix_loss = 0 if gt_m is not None else None
         m_hat = None
         if not drop_matrix:
             if y is not None:
                 x_hat, m_hat = self._forward_cond_mat(x, y, self.transition_matrix, t)
             else:
                 x_hat, m_hat = self._forward_uncond_mat(x, self.transition_matrix, t)
-                matrix_loss = self.matrix_loss(m_hat.view(x.shape[0], self.num_classes + 1, -1),
-                                               gt_m.view(gt_m.size(1), -1).repeat(m_hat.shape[0], 1, 1))
+                if gt_m is not None:
+                    matrix_loss = self.matrix_loss(m_hat.view(x.shape[0], self.num_classes + 1, -1), 
+                                                   gt_m.view(gt_m.size(1), -1).repeat(m_hat.shape[0], 1, 1))
         else:
             if y is not None:
                 x_hat = self._forward_cond_no_mat(x, y, t)
             else:
                 x_hat = self._forward_uncond_no_mat(x, t)
         alpha_clamped = torch.sigmoid(self.alpha)
-        sequence_loss = self.sequence_loss(x_hat, gt_x)
+        sequence_loss = self.sequence_loss(x_hat, gt_x) if gt_x is not None else None
         if not drop_matrix:
-            final_loss = alpha_clamped * sequence_loss + (1 - alpha_clamped) * matrix_loss
+            final_loss = alpha_clamped * sequence_loss + (1 - alpha_clamped) * matrix_loss if sequence_loss is not None else None
         else:
             final_loss = sequence_loss
-        matrix_loss = matrix_loss.item() if matrix_loss != 0 else matrix_loss
-        return x_hat, m_hat, final_loss, sequence_loss.item(), matrix_loss
+        matrix_loss = matrix_loss.item() if matrix_loss not in {0, None} else matrix_loss
+        sequence_loss = sequence_loss.item() if sequence_loss is not None else sequence_loss
+        return x_hat, m_hat, final_loss, sequence_loss, matrix_loss

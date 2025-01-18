@@ -119,8 +119,8 @@ def evaluate(diffuser, denoiser, criterion, test_loader, transition_matrix, cfg,
         summary.add_scalar("test auc", auc, global_step=epoch * l)
         summary.add_scalar("test alpha", torch.sigmoid(denoiser.alpha), global_step=epoch * l)
         denoiser.train()
-    return average_loss, accuracy, recall, precision, f1, auc, w2, average_first_loss, average_second_loss, torch.sigmoid(
-        denoiser.alpha)
+    return average_loss, accuracy, recall, precision, f1, auc, w2, average_first_loss, average_second_loss, \
+        torch.sigmoid(denoiser.alpha).item()
 
 def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, transition_matrix, cfg, summary, logger):
     train_losses, test_losses, test_dist, test_acc, test_precision, test_recall, test_f1, test_auc = \

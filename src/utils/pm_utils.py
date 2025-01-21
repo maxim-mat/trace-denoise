@@ -162,7 +162,7 @@ def traces_tensor_to_list(traces_tensor, limit=None):
 
 
 def conformance_measure(traces_tensor, process_model, initial_marking, final_marking, activity_names,
-                        limit, approximate=False):
+                        limit=None, approximate=False):
     traces = traces_tensor_to_list(traces_tensor, limit)
     df_traces = list_to_traces(traces, activity_names)
     log = converter.apply(df_traces)

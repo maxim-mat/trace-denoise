@@ -34,10 +34,11 @@ from denoisers.ConvolutionDenoiser import ConvolutionDenoiser
 from denoisers.SimpleDenoiser import SimpleDenoiser
 from denoisers.UnetDenoiser import UnetDenoiser
 from denoisers.ConditionalUnetAttentionGraphDenoiser import ConditionalUnetAttentionGraphDenoiser
+from src.sktr.sktr import alignment_accuracy_helper
 from utils.graph_utils import prepare_process_model_for_hetero_gnn
 from utils.initialization import initialize
 from utils import calculate_metrics
-from utils.pm_utils import discover_dk_process, remove_duplicates_dataset, pad_to_multiple_of_n
+from utils.pm_utils import discover_dk_process, remove_duplicates_dataset, pad_to_multiple_of_n, conformance_measure
 from utils.graph_utils import prepare_process_model_for_gnn, get_process_model_reachability_graph_transition_matrix
 
 warnings.filterwarnings("ignore")
@@ -56,7 +57,8 @@ def save_ckpt(model, opt, epoch, cfg, train_loss, test_loss, best=False):
         torch.save(ckpt, os.path.join(cfg.summary_path, 'best.ckpt'))
 
 
-def evaluate(diffuser, denoiser, criterion, test_loader, transition_matrix, cfg, summary, epoch, logger):
+def evaluate(diffuser, denoiser, test_loader, transition_matrix, process_model, init_marking, final_marking,
+             cfg, summary, epoch, logger):
     denoiser.eval()
     total_loss = 0.0
     sequence_loss = 0.0
@@ -90,7 +92,10 @@ def evaluate(diffuser, denoiser, criterion, test_loader, transition_matrix, cfg,
         x_hat_prob_flat = torch.softmax(x_hat_flat, dim=1).to('cpu')
         x_hat_argmax_flat = torch.argmax(x_hat_prob_flat, dim=1).to('cpu')
         x_hat_prob = torch.softmax(x_hat_logit, dim=1).to('cpu')
-        x_hat_argmax = torch.argmax(x_hat_prob, dim=1)
+        x_hat_argmax = torch.argmax(x_hat_prob, dim=1)  # recovered deterministic traces tensor
+
+        alignment = conformance_measure(x_hat_argmax, process_model, init_marking, final_marking, cfg.activity_names,
+                                        limit=1000)
 
         try:
             auc = roc_auc_score(x_argmax_flat, x_hat_prob_flat, multi_class='ovr', average='macro')
@@ -122,7 +127,7 @@ def evaluate(diffuser, denoiser, criterion, test_loader, transition_matrix, cfg,
     return average_loss, accuracy, recall, precision, f1, auc, w2, average_first_loss, average_second_loss, \
         torch.sigmoid(denoiser.alpha).item()
 
-def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, transition_matrix, cfg, summary, logger):
+def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_matrix, cfg, summary, logger):
     train_losses, test_losses, test_dist, test_acc, test_precision, test_recall, test_f1, test_auc = \
         [], [], [], [], [], [], [], []
     train_dist, train_acc, train_precision, train_recall, train_f1, train_auc = [], [], [], [], [], []
@@ -220,7 +225,7 @@ def train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, t
 
             test_epoch_loss, test_epoch_acc, test_epoch_recall, test_epoch_precision, test_epoch_f1, test_epoch_auc, \
                 test_epoch_dist, test_epoch_seq_loss, test_epoch_mat_loss, test_alpha_clamp = \
-                    evaluate(diffuser, denoiser, criterion, test_loader, transition_matrix, cfg, summary, epoch, logger)
+                    evaluate(diffuser, denoiser, test_loader, transition_matrix, cfg, summary, epoch, logger)
             test_dist.append(test_epoch_dist)
             test_losses.append(test_epoch_loss)
             test_acc.append(test_epoch_acc)
@@ -297,15 +302,12 @@ def main():
         denoiser = nn.DataParallel(denoiser, device_ids=[0, 1])
 
     optimizer = AdamW(denoiser.parameters(), cfg.learning_rate)
-    criterion = nn.MSELoss() if cfg.predict_on == 'noise' else nn.CrossEntropyLoss()
-    if cfg.enable_gnn:
-        extra_criterion = nn.CrossEntropyLoss()
     summary = SummaryWriter(cfg.summary_path)
 
     (train_losses, test_losses, test_dist, test_acc, test_precision, tests_recall, test_f1, test_auc, train_acc,
      train_recall, train_precision, train_f1, train_auc, train_dist, train_seq_loss, train_mat_loss, test_seq_loss, 
      test_mat_loss, train_alpha, test_alpha) = \
-        train(diffuser, denoiser, optimizer, criterion, train_loader, test_loader, rg_transition_matrix, cfg, 
+        train(diffuser, denoiser, optimizer, train_loader, test_loader, rg_transition_matrix, cfg,
               summary, logger)
 
     px.line(train_losses).write_html(os.path.join(cfg.summary_path, "train_loss.html"))

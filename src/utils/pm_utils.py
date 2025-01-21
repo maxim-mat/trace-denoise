@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import pm4py
 from pm4py.algo.conformance.alignments.petri_net import algorithm as alignments
+from pm4py.algo.conformance.alignments.petri_net.variants import state_equation_a_star
 from pm4py.objects.conversion.log import converter
 import torch
 import torch.nn.functional as F
@@ -153,10 +154,22 @@ def list_to_traces(traces_list, activity_names):
     return prepare_df_cols_for_discovery(df_deterministic)
 
 
-def conformance_measure(traces, process_model, initial_marking, final_marking, activity_names):
+def traces_tensor_to_list(traces_tensor, limit=None):
+    if limit is None:
+        return [remove_duplicates_trace(xi).tolist() for xi in traces_tensor]
+    else:
+        return [remove_duplicates_trace(xi).tolist()[:limit] for xi in traces_tensor]
+
+
+def conformance_measure(traces_tensor, process_model, initial_marking, final_marking, activity_names,
+                        limit, approximate=False):
+    traces = traces_tensor_to_list(traces_tensor, limit)
     df_traces = list_to_traces(traces, activity_names)
     log = converter.apply(df_traces)
-    return alignments.apply_log(log, process_model, initial_marking, final_marking)
+    if approximate:
+        return alignments.apply_log(log, process_model, initial_marking, final_marking, variant=state_equation_a_star)
+    else:
+        return alignments.apply_log(log, process_model, initial_marking, final_marking)
 
 
 def simulate_process_model(process_model: pm4py.PetriNet, init_marking: pm4py.Marking,

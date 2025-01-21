@@ -74,10 +74,10 @@ def evaluate(diffuser, denoiser, criterion, test_loader, transition_matrix, cfg,
             results_accumulator['x'].append(x)
             results_accumulator['y'].append(y)
             results_accumulator['x_hat'].append(x_hat.permute(0, 2, 1))
-            total_loss += loss.item()
+            total_loss += loss
             sequence_loss += seq_loss
             matrix_loss += mat_loss
-            summary.add_scalar("test_loss", loss.item(), global_step=epoch * l + i)
+            summary.add_scalar("test_loss", loss, global_step=epoch * l + i)
             summary.add_scalar("test_sequence_loss", seq_loss, global_step=epoch * l + i)
             summary.add_scalar("test_matrix_loss", mat_loss, global_step=epoch * l + i)
 

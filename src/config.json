@@ -21,6 +21,7 @@
   "predict_on": "original",
   "seed": 42,
   "enable_gnn": true,
+  "enable_matrix": true,
   "graph_hidden": 128,
   "node_embed_dim": 1,
   "n2v_dimensions": 64,

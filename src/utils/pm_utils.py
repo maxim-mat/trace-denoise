@@ -154,22 +154,30 @@ def list_to_traces(traces_list, activity_names):
     return prepare_df_cols_for_discovery(df_deterministic)
 
 
-def traces_tensor_to_list(traces_tensor, limit=None):
+def traces_tensor_to_list(traces_tensor, limit=None, remove_duplicates=True):
     if limit is None:
-        return [remove_duplicates_trace(xi).tolist() for xi in traces_tensor]
+        if remove_duplicates:
+            return [remove_duplicates_trace(xi).tolist() for xi in traces_tensor]
+        else:
+            return [xi.tolist() for xi in traces_tensor]
     else:
-        return [remove_duplicates_trace(xi).tolist()[:limit] for xi in traces_tensor]
+        if remove_duplicates:
+            return [remove_duplicates_trace(xi).tolist()[:limit] for xi in traces_tensor]
+        else:
+            return [xi.tolist()[:limit] for xi in traces_tensor]
 
 
 def conformance_measure(traces_tensor, process_model, initial_marking, final_marking, activity_names,
-                        limit=None, approximate=False):
-    traces = traces_tensor_to_list(traces_tensor, limit)
+                        limit=None, remove_duplicates=True, approximate=False):
+    traces = traces_tensor_to_list(traces_tensor, limit, remove_duplicates)
     df_traces = list_to_traces(traces, activity_names)
     log = converter.apply(df_traces)
     if approximate:
-        return alignments.apply_log(log, process_model, initial_marking, final_marking, variant=state_equation_a_star)
+        alignment_measures = alignments.apply_log(log, process_model, initial_marking, final_marking,
+                                                  variant=state_equation_a_star)
     else:
-        return alignments.apply_log(log, process_model, initial_marking, final_marking)
+        alignment_measures = alignments.apply_log(log, process_model, initial_marking, final_marking)
+    return [d['fitness'] for d in alignment_measures]
 
 
 def simulate_process_model(process_model: pm4py.PetriNet, init_marking: pm4py.Marking,

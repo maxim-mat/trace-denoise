@@ -57,8 +57,8 @@ def save_ckpt(model, opt, epoch, cfg, train_loss, test_loss, best=False):
         torch.save(ckpt, os.path.join(cfg.summary_path, 'best.ckpt'))
 
 
-def evaluate(diffuser, denoiser, test_loader, transition_matrix, process_model, init_marking, final_marking,
-             cfg, summary, epoch, logger):
+def evaluate(diffuser, denoiser, test_loader, transition_matrix,
+             process_model, init_marking, final_marking, cfg, summary, epoch, logger):
     denoiser.eval()
     total_loss = 0.0
     sequence_loss = 0.0
@@ -70,9 +70,9 @@ def evaluate(diffuser, denoiser, test_loader, transition_matrix, process_model, 
             x = x.permute(0, 2, 1).to(cfg.device).float()
             y = y.permute(0, 2, 1).to(cfg.device).float()
             x_hat, matrix_hat, loss, seq_loss, mat_loss = \
-                        diffuser.sample_with_matrix(denoiser, y.shape[0], cfg.num_classes, denoiser.max_input_dim,
-                                                    transition_matrix.shape[-1], transition_matrix, x, y, 
-                                                    cfg.predict_on)
+                diffuser.sample_with_matrix(denoiser, y.shape[0], cfg.num_classes, denoiser.max_input_dim,
+                                            transition_matrix.shape[-1], transition_matrix, x, y,
+                                            cfg.predict_on)
             results_accumulator['x'].append(x)
             results_accumulator['y'].append(y)
             results_accumulator['x_hat'].append(x_hat.permute(0, 2, 1))
@@ -94,8 +94,10 @@ def evaluate(diffuser, denoiser, test_loader, transition_matrix, process_model, 
         x_hat_prob = torch.softmax(x_hat_logit, dim=1).to('cpu')
         x_hat_argmax = torch.argmax(x_hat_prob, dim=1)  # recovered deterministic traces tensor
 
-        alignment = conformance_measure(x_hat_argmax, process_model, init_marking, final_marking, cfg.activity_names,
-                                        limit=1000)
+        alignment = np.mean(
+            conformance_measure(x_hat_argmax, process_model, init_marking, final_marking, cfg.activity_names,
+                                limit=1000, remove_duplicates=True, approximate=False)
+        )
 
         try:
             auc = roc_auc_score(x_argmax_flat, x_hat_prob_flat, multi_class='ovr', average='macro')
@@ -123,18 +125,22 @@ def evaluate(diffuser, denoiser, test_loader, transition_matrix, process_model, 
         summary.add_scalar("test_f1", f1, global_step=epoch * l)
         summary.add_scalar("test_auc", auc, global_step=epoch * l)
         summary.add_scalar("test_alpha", torch.sigmoid(denoiser.alpha), global_step=epoch * l)
+        summary.add_scalar("test_alignment", alignment, global_step=epoch * l)
         denoiser.train()
     return average_loss, accuracy, recall, precision, f1, auc, w2, average_first_loss, average_second_loss, \
-        torch.sigmoid(denoiser.alpha).item()
+        torch.sigmoid(denoiser.alpha).item(), alignment
 
-def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_matrix, cfg, summary, logger):
+
+def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_matrix,
+          process_model, init_marking, final_marking, cfg, summary, logger):
     train_losses, test_losses, test_dist, test_acc, test_precision, test_recall, test_f1, test_auc = \
         [], [], [], [], [], [], [], []
     train_dist, train_acc, train_precision, train_recall, train_f1, train_auc = [], [], [], [], [], []
     train_seq_loss, train_matrix_loss, test_seq_loss, test_matrix_loss = [], [], [], []
     train_alpha, test_alpha = [], []
+    train_alignment, test_alignment = [], []
     l = len(train_loader)
-    transition_matrix = transition_matrix.unsqueeze(0)
+    transition_matrix = transition_matrix.unsqueeze(0) if transition_matrix is not None else None
     best_loss = float('inf')
     denoiser.train()
     for epoch in tqdm(range(cfg.num_epochs)):
@@ -184,7 +190,7 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
                     y = y.permute(0, 2, 1).to(cfg.device).float()
                     output, matrix_hat, loss, seq_loss, mat_loss = \
                         diffuser.sample_with_matrix(denoiser, y.shape[0], cfg.num_classes, denoiser.max_input_dim,
-                                                    transition_matrix.shape[-1], transition_matrix, x, y, 
+                                                    transition_matrix.shape[-1], transition_matrix, x, y,
                                                     cfg.predict_on)
                     x_hat = output.permute(0, 2, 1)
                     x_argmax = torch.argmax(x, dim=1).to('cpu')
@@ -194,6 +200,10 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
                     x_hat_argmax_flat = torch.argmax(x_hat_prob_flat, dim=1).to('cpu')
                     x_hat_prob = torch.softmax(x_hat, dim=1).to('cpu')
                     x_hat_argmax = torch.argmax(x_hat_prob, dim=1)
+                    alignment = np.mean(
+                        conformance_measure(x_hat_argmax, process_model, init_marking, final_marking,
+                                            cfg.activity_names, limit=1000, remove_duplicates=True, approximate=False)
+                    )
                     try:
                         auc = roc_auc_score(x_argmax_flat, x_hat_prob_flat, multi_class='ovr', average='micro')
                     except ValueError:
@@ -214,6 +224,7 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
                     train_f1.append(f1)
                     train_auc.append(auc)
                     train_dist.append(w2)
+                    train_alignment.append(alignment)
                     summary.add_scalar("train_w2", w2, global_step=epoch * l)
                     summary.add_scalar("train_accuracy", accuracy, global_step=epoch * l)
                     summary.add_scalar("train_recall", recall, global_step=epoch * l)
@@ -221,11 +232,13 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
                     summary.add_scalar("train_f1", f1, global_step=epoch * l)
                     summary.add_scalar("train_auc", auc, global_step=epoch * l)
                     summary.add_scalar("train_alpha", torch.sigmoid(denoiser.alpha), global_step=epoch * l)
+                    summary.add_scalar("train_alignment", torch.sigmoid(denoiser.alpha), global_step=epoch * l)
                 denoiser.train()
 
             test_epoch_loss, test_epoch_acc, test_epoch_recall, test_epoch_precision, test_epoch_f1, test_epoch_auc, \
-                test_epoch_dist, test_epoch_seq_loss, test_epoch_mat_loss, test_alpha_clamp = \
-                    evaluate(diffuser, denoiser, test_loader, transition_matrix, cfg, summary, epoch, logger)
+                test_epoch_dist, test_epoch_seq_loss, test_epoch_mat_loss, test_alpha_clamp, test_epoch_alignment = \
+                evaluate(diffuser, denoiser, test_loader, transition_matrix,
+                         process_model, init_marking, final_marking, cfg, summary, epoch, logger)
             test_dist.append(test_epoch_dist)
             test_losses.append(test_epoch_loss)
             test_acc.append(test_epoch_acc)
@@ -236,14 +249,16 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
             test_seq_loss.append(test_epoch_seq_loss)
             test_matrix_loss.append(test_epoch_mat_loss)
             test_alpha.append(test_alpha_clamp)
+            test_alignment.append(test_epoch_alignment)
             logger.info("saving model")
             save_ckpt(denoiser, optimizer, epoch, cfg, train_losses[-1], test_losses[-1],
                       test_epoch_loss < best_loss)
             best_loss = test_epoch_loss if test_epoch_loss < best_loss else best_loss
 
     return (train_losses, test_losses, test_dist, test_acc, test_precision, test_recall, test_f1, test_auc,
-            train_acc, train_recall, train_precision, train_f1, train_auc, train_dist, train_seq_loss, 
-            train_matrix_loss, test_seq_loss, test_matrix_loss, train_alpha, test_alpha)
+            train_acc, train_recall, train_precision, train_f1, train_auc, train_dist, train_seq_loss,
+            train_matrix_loss, test_seq_loss, test_matrix_loss, train_alpha, test_alpha,
+            train_alignment, test_alignment)
 
 
 def main():
@@ -254,10 +269,9 @@ def main():
     logger.info(f"train size: {len(train_dataset)} test size: {len(test_dataset)}")
     rg_transition_matrix = None
     metadata = None
-    extra_criterion = None
-    if cfg.enable_gnn:
-        dk_process_model, dk_init_marking, dk_final_marking = discover_dk_process(train_dataset, cfg,
-                                                                                  preprocess=remove_duplicates_dataset)
+    dk_process_model, dk_init_marking, dk_final_marking = discover_dk_process(train_dataset, cfg,
+                                                                              preprocess=remove_duplicates_dataset)
+    if cfg.enable_matrix:
         rg_nx, rg_transition_matrix = get_process_model_reachability_graph_transition_matrix(dk_process_model,
                                                                                              dk_init_marking)
         rg_transition_matrix = torch.tensor(rg_transition_matrix, device=cfg.device).float()
@@ -282,7 +296,7 @@ def main():
         denoiser = UnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
                                 max_input_dim=salads_dataset.sequence_length).to(cfg.device).float()
     elif cfg.denoiser == "unet_cond":
-        if cfg.enable_gnn:
+        if cfg.enable_matrix:
             denoiser = ConditionalUnetMatrixDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
                                                      max_input_dim=salads_dataset.sequence_length,
                                                      transition_dim=rg_transition_matrix.shape[-1],
@@ -305,10 +319,10 @@ def main():
     summary = SummaryWriter(cfg.summary_path)
 
     (train_losses, test_losses, test_dist, test_acc, test_precision, tests_recall, test_f1, test_auc, train_acc,
-     train_recall, train_precision, train_f1, train_auc, train_dist, train_seq_loss, train_mat_loss, test_seq_loss, 
-     test_mat_loss, train_alpha, test_alpha) = \
-        train(diffuser, denoiser, optimizer, train_loader, test_loader, rg_transition_matrix, cfg,
-              summary, logger)
+     train_recall, train_precision, train_f1, train_auc, train_dist, train_seq_loss, train_mat_loss, test_seq_loss,
+     test_mat_loss, train_alpha, test_alpha, train_alignment, test_alignment) = \
+        train(diffuser, denoiser, optimizer, train_loader, test_loader, rg_transition_matrix,
+              dk_process_model, dk_init_marking, dk_final_marking, cfg, summary, logger)
 
     px.line(train_losses).write_html(os.path.join(cfg.summary_path, "train_loss.html"))
     px.line(test_losses).write_html(os.path.join(cfg.summary_path, "test_losses.html"))
@@ -333,15 +347,16 @@ def main():
 
     final_results = {
         "train":
-        {
-            "loss": train_losses[-1],
-            "acc": train_acc[-1],
-            "precision": train_precision[-1],
-            "recall": train_recall[-1],
-            "f1": train_f1[-1],
-            "auc": train_auc[-1],
-            "dist": train_dist[-1]
-        },
+            {
+                "loss": train_losses[-1],
+                "acc": train_acc[-1],
+                "precision": train_precision[-1],
+                "recall": train_recall[-1],
+                "f1": train_f1[-1],
+                "auc": train_auc[-1],
+                "dist": train_dist[-1],
+                "alignment": train_alignment[-1],
+            },
         "test":
             {
                 "loss": test_losses[-1],
@@ -350,7 +365,8 @@ def main():
                 "recall": tests_recall[-1],
                 "f1": test_f1[-1],
                 "auc": test_auc[-1],
-                "dist": test_dist[-1]
+                "dist": test_dist[-1],
+                "alignment": test_alignment[-1],
             }
     }
     with open(os.path.join(cfg.summary_path, "final_results.json"), "w") as f:

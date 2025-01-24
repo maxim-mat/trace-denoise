@@ -1,6 +1,6 @@
 {
   "data_path": "../data/pickles/50_salads_unified.pkl",
-  "summary_path": "../runs/matrix_cond_50_salads_500ts_full_dropout",
+  "summary_path": "../runs/50_salads_cond_new",
   "device": "cuda:1",
   "parallelize": false,
   "num_epochs": 3000,
@@ -21,7 +21,7 @@
   "predict_on": "original",
   "seed": 42,
   "enable_gnn": true,
-  "enable_matrix": true,
+  "enable_matrix": false,
   "graph_hidden": 128,
   "node_embed_dim": 1,
   "n2v_dimensions": 64,

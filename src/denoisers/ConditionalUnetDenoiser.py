@@ -13,6 +13,7 @@ class ConditionalUnetDenoiser(nn.Module):
         self.time_dim = time_dim
         self.max_input_dim = max_input_dim
         self.loss = nn.CrossEntropyLoss()
+        self.alpha = torch.tensor(0.0)  # for compatibility with other denoisers
 
         self.inc = DoubleConv(in_ch, 64)
         self.down1 = Down(64, 128, emb_dim=time_dim)

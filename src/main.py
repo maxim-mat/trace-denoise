@@ -34,7 +34,7 @@ from denoisers.ConvolutionDenoiser import ConvolutionDenoiser
 from denoisers.SimpleDenoiser import SimpleDenoiser
 from denoisers.UnetDenoiser import UnetDenoiser
 from denoisers.ConditionalUnetAttentionGraphDenoiser import ConditionalUnetAttentionGraphDenoiser
-from src.sktr.sktr import alignment_accuracy_helper
+from sktr.sktr import alignment_accuracy_helper
 from utils.graph_utils import prepare_process_model_for_hetero_gnn
 from utils.initialization import initialize
 from utils import calculate_metrics
@@ -140,7 +140,7 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
     train_alpha, test_alpha = [], []
     train_alignment, test_alignment = [], []
     l = len(train_loader)
-    transition_matrix = transition_matrix.unsqueeze(0) if transition_matrix is not None else None
+    transition_matrix = transition_matrix.unsqueeze(0)
     best_loss = float('inf')
     denoiser.train()
     for epoch in tqdm(range(cfg.num_epochs)):
@@ -267,7 +267,8 @@ def main():
     train_dataset, test_dataset = train_test_split(salads_dataset, train_size=cfg.train_percent, shuffle=True,
                                                    random_state=cfg.seed)
     logger.info(f"train size: {len(train_dataset)} test size: {len(test_dataset)}")
-    rg_transition_matrix = None
+    # random initialization instead of None for compatibility, isn't used in any way if enable_matrix is false
+    rg_transition_matrix = torch.randn((cfg.num_classes, 2, 2)).to(cfg.device)
     metadata = None
     dk_process_model, dk_init_marking, dk_final_marking = discover_dk_process(train_dataset, cfg,
                                                                               preprocess=remove_duplicates_dataset)
@@ -300,11 +301,11 @@ def main():
             denoiser = ConditionalUnetMatrixDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
                                                      max_input_dim=salads_dataset.sequence_length,
                                                      transition_dim=rg_transition_matrix.shape[-1],
-                                                     device=cfg.device).to(
-                cfg.device).float()
+                                                     device=cfg.device).to(cfg.device).float()
         else:
             denoiser = ConditionalUnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
-                                               max_input_dim=salads_dataset.sequence_length).to(cfg.device).float()
+                                               max_input_dim=salads_dataset.sequence_length,
+                                               device=cfg.device).to(cfg.device).float()
     elif cfg.denoiser == "conv":
         denoiser = ConvolutionDenoiser(input_dim=cfg.num_classes, output_dim=cfg.num_classes, num_layers=10).to(
             cfg.device).float()

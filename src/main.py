@@ -91,8 +91,8 @@ def evaluate(diffuser, denoiser, test_loader, transition_matrix,
         x_hat_flat = x_hat_logit.reshape(-1, cfg.num_classes).to('cpu')
         x_hat_prob_flat = torch.softmax(x_hat_flat, dim=1).to('cpu')
         x_hat_argmax_flat = torch.argmax(x_hat_prob_flat, dim=1).to('cpu')
-        x_hat_prob = torch.softmax(x_hat_logit, dim=1).to('cpu')
-        x_hat_argmax = torch.argmax(x_hat_prob, dim=1)  # recovered deterministic traces tensor
+        x_hat_prob = torch.softmax(x_hat_logit, dim=2).to('cpu')
+        x_hat_argmax = torch.argmax(x_hat_prob, dim=2)  # recovered deterministic traces tensor
 
         alignment = np.mean(
             conformance_measure(x_hat_argmax, process_model, init_marking, final_marking, cfg.activity_names,
@@ -198,8 +198,8 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
                     x_hat_flat = x_hat.reshape(-1, cfg.num_classes).to('cpu')
                     x_hat_prob_flat = torch.softmax(x_hat_flat, dim=1).to('cpu')
                     x_hat_argmax_flat = torch.argmax(x_hat_prob_flat, dim=1).to('cpu')
-                    x_hat_prob = torch.softmax(x_hat, dim=1).to('cpu')
-                    x_hat_argmax = torch.argmax(x_hat_prob, dim=1)
+                    x_hat_prob = torch.softmax(x_hat, dim=2).to('cpu')
+                    x_hat_argmax = torch.argmax(x_hat_prob, dim=2)
                     alignment = np.mean(
                         conformance_measure(x_hat_argmax, process_model, init_marking, final_marking,
                                             cfg.activity_names, limit=1000, remove_duplicates=True, approximate=False)
@@ -232,7 +232,7 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
                     summary.add_scalar("train_f1", f1, global_step=epoch * l)
                     summary.add_scalar("train_auc", auc, global_step=epoch * l)
                     summary.add_scalar("train_alpha", torch.sigmoid(denoiser.alpha), global_step=epoch * l)
-                    summary.add_scalar("train_alignment", torch.sigmoid(denoiser.alpha), global_step=epoch * l)
+                    summary.add_scalar("train_alignment", train_alignment, global_step=epoch * l)
                 denoiser.train()
 
             test_epoch_loss, test_epoch_acc, test_epoch_recall, test_epoch_precision, test_epoch_f1, test_epoch_auc, \
@@ -345,6 +345,8 @@ def main():
     px.line(test_mat_loss).write_html(os.path.join(cfg.summary_path, "test_mat_loss.html"))
     px.line(train_alpha).write_html(os.path.join(cfg.summary_path, "train_alpha.html"))
     px.line(test_alpha).write_html(os.path.join(cfg.summary_path, "test_alpha.html"))
+    px.line(train_alignment).write_html(os.path.join(cfg.summary_path, "train_alignment.html"))
+    px.line(test_alignment).write_html(os.path.join(cfg.summary_path, "test_alignment.html"))
 
     final_results = {
         "train":

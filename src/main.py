@@ -200,7 +200,7 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
                     x_hat_argmax_flat = torch.argmax(x_hat_prob_flat, dim=1).to('cpu')
                     x_hat_prob = torch.softmax(x_hat, dim=2).to('cpu')
                     x_hat_argmax = torch.argmax(x_hat_prob, dim=2)
-                    alignment = np.mean(
+                    train_epoch_alignment = np.mean(
                         conformance_measure(x_hat_argmax, process_model, init_marking, final_marking,
                                             cfg.activity_names, limit=1000, remove_duplicates=True, approximate=False)
                     )
@@ -224,7 +224,7 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
                     train_f1.append(f1)
                     train_auc.append(auc)
                     train_dist.append(w2)
-                    train_alignment.append(alignment)
+                    train_alignment.append(train_epoch_alignment)
                     summary.add_scalar("train_w2", w2, global_step=epoch * l)
                     summary.add_scalar("train_accuracy", accuracy, global_step=epoch * l)
                     summary.add_scalar("train_recall", recall, global_step=epoch * l)
@@ -232,7 +232,7 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
                     summary.add_scalar("train_f1", f1, global_step=epoch * l)
                     summary.add_scalar("train_auc", auc, global_step=epoch * l)
                     summary.add_scalar("train_alpha", torch.sigmoid(denoiser.alpha), global_step=epoch * l)
-                    summary.add_scalar("train_alignment", train_alignment, global_step=epoch * l)
+                    summary.add_scalar("train_alignment", train_epoch_alignment, global_step=epoch * l)
                 denoiser.train()
 
             test_epoch_loss, test_epoch_acc, test_epoch_recall, test_epoch_precision, test_epoch_f1, test_epoch_auc, \

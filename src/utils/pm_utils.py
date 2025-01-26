@@ -169,8 +169,6 @@ def traces_tensor_to_list(traces_tensor, limit=None, remove_duplicates=True):
 
 def conformance_measure(traces_tensor, process_model, initial_marking, final_marking, activity_names,
                         limit=None, remove_duplicates=True, approximate=False):
-    print(traces_tensor)
-    print(traces_tensor.shape)
     traces = traces_tensor_to_list(traces_tensor, limit, remove_duplicates)
     df_traces = list_to_traces(traces, activity_names)
     log = converter.apply(df_traces)

@@ -217,7 +217,7 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
                     recall = recall_score(x_argmax_flat, x_hat_argmax_flat, average='macro', zero_division=0)
                     f1 = f1_score(x_argmax_flat, x_hat_argmax_flat, average='macro', zero_division=0)
                     with open(os.path.join(cfg.summary_path, f"epoch_{epoch}_train.pkl"), "wb") as f:
-                        pkl.dump({"original": x, "denoised": x_hat}, f)
+                        pkl.dump({"x": x, y: "y", "x_hat": x_hat}, f)
                     train_acc.append(accuracy)
                     train_recall.append(recall)
                     train_precision.append(precision)
@@ -326,11 +326,11 @@ def main():
               dk_process_model, dk_init_marking, dk_final_marking, cfg, summary, logger)
 
     px.line(train_losses).write_html(os.path.join(cfg.summary_path, "train_loss.html"))
-    px.line(test_losses).write_html(os.path.join(cfg.summary_path, "test_losses.html"))
+    px.line(test_losses).write_html(os.path.join(cfg.summary_path, "test_loss.html"))
     px.line(test_dist).write_html(os.path.join(cfg.summary_path, "test_dist.html"))
     px.line(test_acc).write_html(os.path.join(cfg.summary_path, "test_acc.html"))
     px.line(test_precision).write_html(os.path.join(cfg.summary_path, "test_precision.html"))
-    px.line(tests_recall).write_html(os.path.join(cfg.summary_path, "tests_recall.html"))
+    px.line(tests_recall).write_html(os.path.join(cfg.summary_path, "test_recall.html"))
     px.line(test_f1).write_html(os.path.join(cfg.summary_path, "test_f1.html"))
     px.line(test_auc).write_html(os.path.join(cfg.summary_path, "test_auc.html"))
     px.line(train_acc).write_html(os.path.join(cfg.summary_path, "train_acc.html"))

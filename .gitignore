@@ -128,4 +128,5 @@ data/*/
 !data/*.*
 .idea/
 runs/
+pretty_results/
 /data/rgb.zip

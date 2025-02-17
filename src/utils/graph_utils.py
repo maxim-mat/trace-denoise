@@ -154,3 +154,11 @@ def get_process_model_reachability_graph_transition_matrix(process_model: pm4py.
             raise RuntimeError(f"somehow, transition: {transition_name} was encountered but not indexed")
 
     return rg_nx, transition_matrix
+
+
+def get_process_model_petri_net_transition_matrix(process_model: pm4py.PetriNet, init_marking: pm4py.Marking,
+                                                  final_marking: pm4py.Marking):
+    pn_nx = pm4py.convert_petri_net_to_networkx(process_model, init_marking, final_marking)
+    transition_matrix = nx.adjacency_matrix(pn_nx).todense()
+
+    return pn_nx, transition_matrix

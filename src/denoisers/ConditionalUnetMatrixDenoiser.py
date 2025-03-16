@@ -148,7 +148,7 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
 
         # self.outc_mat_linear = nn.Linear(64 * max_input_dim, 64)
         # self.outc_mat = nn.Linear(64, self.transition_dim * self.transition_dim)
-        self.outc_mat = nn.Conv2d(64, out_ch + 1, kernel_size=1)
+        self.outc_mat = nn.Conv2d(64, 1, kernel_size=1)
         self.outc = nn.Conv1d(64, out_ch, kernel_size=1)
 
     def pos_encoding(self, t, channels):
@@ -398,7 +398,7 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
             else:
                 x_hat, m_hat = self._forward_uncond_mat(x, self.transition_matrix, t)
                 if gt_m is not None:
-                    matrix_loss = self.matrix_loss(m_hat.view(x.shape[0], self.num_classes + 1, -1), 
+                    matrix_loss = self.matrix_loss(m_hat.view(x.shape[0], 1, -1), 
                                                    gt_m.view(gt_m.size(1), -1).repeat(m_hat.shape[0], 1, 1))
         else:
             if y is not None:

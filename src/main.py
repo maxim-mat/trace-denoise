@@ -39,7 +39,8 @@ from utils.graph_utils import prepare_process_model_for_hetero_gnn
 from utils.initialization import initialize
 from utils import calculate_metrics
 from utils.pm_utils import discover_dk_process, remove_duplicates_dataset, pad_to_multiple_of_n, conformance_measure
-from utils.graph_utils import prepare_process_model_for_gnn, get_process_model_reachability_graph_transition_matrix, get_process_model_petri_net_transition_matrix
+from utils.graph_utils import prepare_process_model_for_gnn, get_process_model_reachability_graph_transition_matrix, \
+    get_process_model_petri_net_transition_matrix
 
 warnings.filterwarnings("ignore")
 
@@ -94,10 +95,10 @@ def evaluate(diffuser, denoiser, test_loader, transition_matrix,
         x_hat_prob = torch.softmax(x_hat_logit, dim=2).to('cpu')
         x_hat_argmax = torch.argmax(x_hat_prob, dim=2)  # recovered deterministic traces tensor
 
-        #alignment = np.mean(
+        # alignment = np.mean(
         #    conformance_measure(x_hat_argmax, process_model, init_marking, final_marking, cfg.activity_names,
         #                        limit=1000, remove_duplicates=True, approximate=False)
-        #)
+        # )
         alignment = 0
 
         try:
@@ -201,10 +202,10 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
                     x_hat_argmax_flat = torch.argmax(x_hat_prob_flat, dim=1).to('cpu')
                     x_hat_prob = torch.softmax(x_hat, dim=2).to('cpu')
                     x_hat_argmax = torch.argmax(x_hat_prob, dim=2)
-                    #train_epoch_alignment = np.mean(
+                    # train_epoch_alignment = np.mean(
                     #    conformance_measure(x_hat_argmax, process_model, init_marking, final_marking,
                     #                        cfg.activity_names, limit=1000, remove_duplicates=True, approximate=False)
-                    #)
+                    # )
                     train_epoch_alignment = 0
                     try:
                         auc = roc_auc_score(x_argmax_flat, x_hat_prob_flat, multi_class='ovr', average='micro')
@@ -275,9 +276,15 @@ def main():
     dk_process_model, dk_init_marking, dk_final_marking = discover_dk_process(train_dataset, cfg,
                                                                               preprocess=remove_duplicates_dataset)
     if cfg.enable_matrix:
-        rg_nx, rg_transition_matrix = get_process_model_petri_net_transition_matrix(dk_process_model,
-                                                                                    dk_init_marking, dk_final_marking)
-        rg_transition_matrix = torch.tensor(rg_transition_matrix, device=cfg.device).unsqueeze(0).float()
+        if cfg.matrix_type == "pm":
+            rg_nx, rg_transition_matrix = get_process_model_petri_net_transition_matrix(dk_process_model,
+                                                                                        dk_init_marking,
+                                                                                        dk_final_marking)
+            rg_transition_matrix = torch.tensor(rg_transition_matrix, device=cfg.device).unsqueeze(0).float()
+        elif cfg.matrix_type == "rg":
+            rg_nx, rg_transition_matrix = get_process_model_reachability_graph_transition_matrix(dk_process_model,
+                                                                                                 dk_init_marking)
+            rg_transition_matrix = torch.tensor(rg_transition_matrix, device=cfg.device).float()
         rg_transition_matrix = pad_to_multiple_of_n(rg_transition_matrix)
 
     train_loader = DataLoader(

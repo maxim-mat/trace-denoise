@@ -2,7 +2,7 @@ from typing import Iterable, Tuple
 from pm4py.objects.petri_net.utils import reachability_graph
 import networkx as nx
 import torch
-from node2vec import Node2Vec
+# from node2vec import Node2Vec
 from sklearn.preprocessing import OneHotEncoder
 import numpy as np
 from torch_geometric.data import HeteroData

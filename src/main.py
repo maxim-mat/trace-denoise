@@ -1,45 +1,27 @@
-import argparse
 import json
-import logging
 import os
 import pickle as pkl
 import random
 import warnings
-from dataclasses import dataclass
-from typing import Tuple
-import networkx as nx
 import numpy as np
 import plotly.express as px
-import pm4py
 import torch
 import torch.nn as nn
-import torch_geometric.data
 from scipy.stats import wasserstein_distance
 from sklearn.metrics import roc_auc_score, accuracy_score, precision_score, recall_score, f1_score
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import OneHotEncoder
 from tensorboardX import SummaryWriter
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
-from torch_geometric.utils import from_networkx
 from tqdm import tqdm
 
 from dataset.dataset import SaladsDataset
 from ddpm.ddpm_multinomial import Diffusion
 from denoisers.ConditionalUnetDenoiser import ConditionalUnetDenoiser
 from denoisers.ConditionalUnetMatrixDenoiser import ConditionalUnetMatrixDenoiser
-from denoisers.ConditionalUnetGraphDenoiser import ConditionalUnetGraphDenoiser
-from denoisers.ConditionalUnetNodeEmbeddingDenoiser import ConditionalUnetNodeEmbeddingDenoiser
-from denoisers.ConvolutionDenoiser import ConvolutionDenoiser
-from denoisers.SimpleDenoiser import SimpleDenoiser
-from denoisers.UnetDenoiser import UnetDenoiser
-from denoisers.ConditionalUnetAttentionGraphDenoiser import ConditionalUnetAttentionGraphDenoiser
-from sktr.sktr import alignment_accuracy_helper
-from utils.graph_utils import prepare_process_model_for_hetero_gnn
 from utils.initialization import initialize
-from utils import calculate_metrics
 from utils.pm_utils import discover_dk_process, remove_duplicates_dataset, pad_to_multiple_of_n, conformance_measure
-from utils.graph_utils import prepare_process_model_for_gnn, get_process_model_reachability_graph_transition_matrix, \
+from utils.graph_utils import get_process_model_reachability_graph_transition_matrix, \
     get_process_model_petri_net_transition_matrix
 
 warnings.filterwarnings("ignore")
@@ -272,7 +254,6 @@ def main():
     logger.info(f"train size: {len(train_dataset)} test size: {len(test_dataset)}")
     # random initialization instead of None for compatibility, isn't used in any way if enable_matrix is false
     rg_transition_matrix = torch.randn((cfg.num_classes, 2, 2)).to(cfg.device)
-    metadata = None
     dk_process_model, dk_init_marking, dk_final_marking = discover_dk_process(train_dataset, cfg,
                                                                               preprocess=remove_duplicates_dataset)
     if cfg.enable_matrix:
@@ -302,26 +283,15 @@ def main():
 
     diffuser = Diffusion(noise_steps=cfg.num_timesteps, device=cfg.device)
 
-    if cfg.denoiser == "unet":
-        denoiser = UnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
-                                max_input_dim=salads_dataset.sequence_length).to(cfg.device).float()
-    elif cfg.denoiser == "unet_cond":
-        if cfg.enable_matrix:
-            denoiser = ConditionalUnetMatrixDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
-                                                     max_input_dim=salads_dataset.sequence_length,
-                                                     transition_dim=rg_transition_matrix.shape[-1],
-                                                     device=cfg.device).to(cfg.device).float()
-        else:
-            denoiser = ConditionalUnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
-                                               max_input_dim=salads_dataset.sequence_length,
-                                               device=cfg.device).to(cfg.device).float()
-    elif cfg.denoiser == "conv":
-        denoiser = ConvolutionDenoiser(input_dim=cfg.num_classes, output_dim=cfg.num_classes, num_layers=10).to(
-            cfg.device).float()
+    if cfg.enable_matrix:
+        denoiser = ConditionalUnetMatrixDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
+                                                 max_input_dim=salads_dataset.sequence_length,
+                                                 transition_dim=rg_transition_matrix.shape[-1],
+                                                 device=cfg.device).to(cfg.device).float()
     else:
-        denoiser = SimpleDenoiser(input_dim=cfg.num_classes, hidden_dim=cfg.denoiser_hidden, output_dim=cfg.num_classes,
-                                  num_layers=cfg.denoiser_layers, time_dim=128, device=cfg.device).to(
-            cfg.device).float()
+        denoiser = ConditionalUnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
+                                           max_input_dim=salads_dataset.sequence_length,
+                                           device=cfg.device).to(cfg.device).float()
     if cfg.parallelize:
         denoiser = nn.DataParallel(denoiser, device_ids=[0, 1])
 

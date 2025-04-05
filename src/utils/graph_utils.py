@@ -13,19 +13,6 @@ from utils.Config import Config
 import ast
 
 
-def get_node2vec_features(graph: nx.Graph, cfg: Config) -> Iterable:
-    """
-
-    :param cfg:
-    :param graph:
-    :return:
-    """
-    n2v = Node2Vec(graph, dimensions=cfg.n2v_dimensions, walk_length=cfg.n2v_walk_length, num_walks=cfg.n2v_num_walks,
-                   p=cfg.n2v_p, q=cfg.n2v_q, workers=cfg.num_workers, seed=cfg.seed)
-    n2v_model = n2v.fit(window=cfg.n2v_window, min_count=cfg.n2v_min_count, batch_words=cfg.n2v_batch_words)
-    return [n2v_model.wv[n] for n in graph.nodes]
-
-
 def get_onehot_features(graph: nx.Graph) -> Iterable:
     node_names = np.array([n[0] for n in graph.nodes(data=True)]).reshape(-1, 1)
     one_hot_encoder = OneHotEncoder(sparse_output=False)

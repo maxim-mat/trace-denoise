@@ -68,7 +68,7 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
         self.transition_matrix = transition_matrix if transition_matrix is not None \
             else nn.Parameter(torch.randn(1, in_ch + 1, self.transition_dim, self.transition_dim).to(device))
         self.sequence_loss = nn.CrossEntropyLoss()
-        self.matrix_loss = nn.CrossEntropyLoss()
+        self.matrix_loss = nn.BCEWithLogitsLoss()
 
         self.inc = DoubleConv(in_ch, 64)
         self.down1 = Down(64, 128, emb_dim=time_dim)
@@ -397,9 +397,9 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
                 x_hat, m_hat = self._forward_cond_mat(x, y, self.transition_matrix, t)
             else:
                 x_hat, m_hat = self._forward_uncond_mat(x, self.transition_matrix, t)
-                if gt_m is not None:
-                    matrix_loss = self.matrix_loss(m_hat.view(x.shape[0], 1, -1), 
-                                                   gt_m.view(gt_m.size(1), -1).repeat(m_hat.shape[0], 1, 1))
+            if gt_m is not None:
+                matrix_loss = self.matrix_loss(m_hat,
+                                               gt_m.repeat(m_hat.shape[0], 1, 1, 1))
         else:
             if y is not None:
                 x_hat = self._forward_cond_no_mat(x, y, t)

@@ -1,6 +1,6 @@
 {
-  "data_path": "../data/pickles/breakfast_unified.pkl",
-  "summary_path": "../runs/breakfast_petri_matrix_test",
+  "data_path": "../data/synthetic/50_salads_synth_from_det_0_670.pkl",
+  "summary_path": "../runs/temp",
   "device": "cuda:1",
   "parallelize": false,
   "num_epochs": 3000,
@@ -22,6 +22,7 @@
   "seed": 42,
   "enable_gnn": true,
   "enable_matrix": true,
+  "matrix_type": "pm",
   "graph_hidden": 128,
   "node_embed_dim": 1,
   "n2v_dimensions": 64,

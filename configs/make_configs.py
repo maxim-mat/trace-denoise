@@ -7,7 +7,7 @@ with open("config.json", "r") as f:
 data_dir, _ = os.path.split(cfg['data_path'])
 save_dir, _ = os.path.split(cfg['summary_path'])
 
-for dataset in os.listdir("../data/pickles"):
+for dataset in os.listdir("../data/synthetic"):
   cfg_iter = cfg
   name, _ = os.path.splitext(dataset)
   if "50_salads" in dataset:
@@ -16,6 +16,7 @@ for dataset in os.listdir("../data/pickles"):
     with open(f"cfg_{name}.json", "w") as f:
       json.dump(cfg_iter, f)
     cfg_iter['enable_matrix'] = False
+    cfg_iter['summary_path'] = f"../runs/{name}_no_mat"
     with open(f"cfg_{name}_no_mat.json", "w") as f:
       json.dump(cfg_iter, f)
     

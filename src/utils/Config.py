@@ -22,6 +22,7 @@ class Config:
     predict_on: str = None
     seed: int = None
     enable_matrix: bool = None
+    gamma: float = None
     matrix_type: str = None
     activity_names: dict[int, str] = None
     process_discovery_method: str = None

@@ -56,7 +56,7 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
         forward(x, t, gt_x, gt_m, y=None, drop_matrix=False):
             Main forward pass method. Computes the denoised output and loss.
     """
-    def __init__(self, in_ch, out_ch, max_input_dim, transition_dim, transition_matrix=None, time_dim=128,
+    def __init__(self, in_ch, out_ch, max_input_dim, transition_dim, transition_matrix=None, time_dim=128, gamma=None,
                  device="cuda"):
         super().__init__()
         self.device = device
@@ -64,7 +64,7 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
         self.num_classes = in_ch
         self.max_input_dim = max_input_dim
         self.transition_dim = transition_dim
-        self.alpha = nn.Parameter(torch.rand(1)).float().to(device)  # hybrid loss scale parameter
+        self.alpha = gamma if gamma is not None else 0.5
         self.transition_matrix = transition_matrix if transition_matrix is not None \
             else nn.Parameter(torch.randn(1, in_ch + 1, self.transition_dim, self.transition_dim).to(device))
         self.sequence_loss = nn.CrossEntropyLoss()
@@ -405,7 +405,7 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
                 x_hat = self._forward_cond_no_mat(x, y, t)
             else:
                 x_hat = self._forward_uncond_no_mat(x, t)
-        alpha_clamped = torch.sigmoid(self.alpha)
+        alpha_clamped = self.alpha
         sequence_loss = self.sequence_loss(x_hat, gt_x) if gt_x is not None else None
         if not drop_matrix:
             final_loss = alpha_clamped * sequence_loss + (1 - alpha_clamped) * matrix_loss if sequence_loss is not None else None

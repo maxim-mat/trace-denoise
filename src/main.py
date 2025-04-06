@@ -287,6 +287,7 @@ def main():
         denoiser = ConditionalUnetMatrixDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
                                                  max_input_dim=salads_dataset.sequence_length,
                                                  transition_dim=rg_transition_matrix.shape[-1],
+                                                 gamma=cfg.gamma,
                                                  device=cfg.device).to(cfg.device).float()
     else:
         denoiser = ConditionalUnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,

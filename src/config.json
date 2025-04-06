@@ -18,6 +18,7 @@
   "predict_on": "original",
   "seed": 42,
   "enable_matrix": true,
+  "gamma": 0.5,
   "matrix_type": "pm",
   "activity_names": {
     "0": "cut_tomato",

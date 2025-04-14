@@ -128,7 +128,7 @@ def get_process_model_reachability_graph_transition_matrix(process_model: pm4py.
     nodes = sorted(rg_nx.nodes())
     num_transitions = len(transition_names)
     num_nodes = len(nodes)
-    transition_matrix = np.zeros((num_transitions, num_nodes, num_nodes), dtype=int)
+    transition_matrix = np.zeros((1, num_nodes, num_nodes), dtype=int)
 
     for edge in rg_nx.edges(data=True):
         from_node = nodes.index(edge[0])
@@ -136,7 +136,7 @@ def get_process_model_reachability_graph_transition_matrix(process_model: pm4py.
         transition_name = edge[2]['label'][1]
         if transition_name in transition_name_index:
             transition_idx = transition_name_index[transition_name]
-            transition_matrix[transition_idx, from_node, to_node] = 1
+            transition_matrix[0, from_node, to_node] = 1
         else:
             raise RuntimeError(f"somehow, transition: {transition_name} was encountered but not indexed")
 

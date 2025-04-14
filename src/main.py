@@ -108,11 +108,11 @@ def evaluate(diffuser, denoiser, test_loader, transition_matrix,
         summary.add_scalar("test_precision", precision, global_step=epoch * l)
         summary.add_scalar("test_f1", f1, global_step=epoch * l)
         summary.add_scalar("test_auc", auc, global_step=epoch * l)
-        summary.add_scalar("test_alpha", torch.sigmoid(denoiser.alpha), global_step=epoch * l)
+        summary.add_scalar("test_alpha", denoiser.alpha, global_step=epoch * l)
         summary.add_scalar("test_alignment", alignment, global_step=epoch * l)
         denoiser.train()
     return average_loss, accuracy, recall, precision, f1, auc, w2, average_first_loss, average_second_loss, \
-        torch.sigmoid(denoiser.alpha).item(), alignment
+        denoiser.alpha, alignment
 
 
 def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_matrix,
@@ -158,7 +158,7 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
         train_losses.append(epoch_loss / l)
         train_seq_loss.append(epoch_first_loss / l)
         train_matrix_loss.append(epoch_second_loss / max(l_matrix, 1))
-        train_alpha.append(torch.sigmoid(denoiser.alpha).item())
+        train_alpha.append(denoiser.alpha)
 
         if epoch % cfg.test_every == 0:
             logger.info("testing epoch")
@@ -216,7 +216,7 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
                     summary.add_scalar("train_precision", precision, global_step=epoch * l)
                     summary.add_scalar("train_f1", f1, global_step=epoch * l)
                     summary.add_scalar("train_auc", auc, global_step=epoch * l)
-                    summary.add_scalar("train_alpha", torch.sigmoid(denoiser.alpha), global_step=epoch * l)
+                    summary.add_scalar("train_alpha", denoiser.alpha, global_step=epoch * l)
                     summary.add_scalar("train_alignment", train_epoch_alignment, global_step=epoch * l)
                 denoiser.train()
 

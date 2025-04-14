@@ -1,7 +1,7 @@
 {
   "data_path": "../data/pickles/50_salads_unified.pkl",
-  "summary_path": "../final_runs/50_salads_unified_rg",
-  "device": "cuda:1",
+  "summary_path": "../final_runs/debug",
+  "device": "cuda:0",
   "parallelize": false,
   "num_epochs": 3000,
   "learning_rate": 5e-6,

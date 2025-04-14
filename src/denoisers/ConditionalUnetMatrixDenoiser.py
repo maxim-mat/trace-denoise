@@ -57,7 +57,7 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
             Main forward pass method. Computes the denoised output and loss.
     """
     def __init__(self, in_ch, out_ch, max_input_dim, transition_dim, transition_matrix=None, time_dim=128, gamma=None,
-                 device="cuda"):
+                 matrix_out_channels=1, device="cuda"):
         super().__init__()
         self.device = device
         self.time_dim = time_dim
@@ -148,7 +148,7 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
 
         # self.outc_mat_linear = nn.Linear(64 * max_input_dim, 64)
         # self.outc_mat = nn.Linear(64, self.transition_dim * self.transition_dim)
-        self.outc_mat = nn.Conv2d(64, 1, kernel_size=1)
+        self.outc_mat = nn.Conv2d(64, matrix_out_channels, kernel_size=1)
         self.outc = nn.Conv1d(64, out_ch, kernel_size=1)
 
     def pos_encoding(self, t, channels):

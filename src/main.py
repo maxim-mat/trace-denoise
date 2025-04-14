@@ -22,7 +22,7 @@ from denoisers.ConditionalUnetMatrixDenoiser import ConditionalUnetMatrixDenoise
 from utils.initialization import initialize
 from utils.pm_utils import discover_dk_process, remove_duplicates_dataset, pad_to_multiple_of_n, conformance_measure
 from utils.graph_utils import get_process_model_reachability_graph_transition_matrix, \
-    get_process_model_petri_net_transition_matrix
+    get_process_model_petri_net_transition_matrix, get_process_model_reachability_graph_transition_multimatrix
 
 warnings.filterwarnings("ignore")
 
@@ -263,7 +263,7 @@ def main():
                                                                                         dk_final_marking)
             rg_transition_matrix = torch.tensor(rg_transition_matrix, device=cfg.device).unsqueeze(0).float()
         elif cfg.matrix_type == "rg":
-            rg_nx, rg_transition_matrix = get_process_model_reachability_graph_transition_matrix(dk_process_model,
+            rg_nx, rg_transition_matrix = get_process_model_reachability_graph_transition_multimatrix(dk_process_model,
                                                                                                  dk_init_marking)
             rg_transition_matrix = torch.tensor(rg_transition_matrix, device=cfg.device).float()
         rg_transition_matrix = pad_to_multiple_of_n(rg_transition_matrix)
@@ -288,6 +288,7 @@ def main():
                                                  max_input_dim=salads_dataset.sequence_length,
                                                  transition_dim=rg_transition_matrix.shape[-1],
                                                  gamma=cfg.gamma,
+                                                 matrix_out_channels=rg_transition_matrix.shape[0],
                                                  device=cfg.device).to(cfg.device).float()
     else:
         denoiser = ConditionalUnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,

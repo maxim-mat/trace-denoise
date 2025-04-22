@@ -3,7 +3,8 @@ import os
 from sklearn.model_selection import train_test_split
 
 from dataset.dataset import SaladsDataset
-from utils import initialize, train_sktr, evaluate_sktr_on_dataset
+from utils.initialization import initialize
+from utils.pm_utils import train_sktr, evaluate_sktr_on_dataset
 
 import pickle as pkl
 
@@ -17,6 +18,8 @@ def main():
     sktr_recovered = evaluate_sktr_on_dataset(test_dataset, sktr_model, cfg)
     with open(os.path.join(cfg.summary_path, "recovered_traces.pkl"), "wb") as f:
         pkl.dump(sktr_recovered, f)
+    with open(os.path.join(cfg.summary_path, "test_dataset.pkl"), "wb") as f:
+        pkl.dump(test_dataset, f)
 
 
 if __name__ == "__main__":

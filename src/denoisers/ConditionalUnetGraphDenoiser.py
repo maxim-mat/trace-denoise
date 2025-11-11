@@ -8,41 +8,37 @@ from modules.GraphUp import GraphUp
 from modules.GraphDown import GraphDown
 from modules.Down import Down
 from modules.Up import Up
+from modules.GraphEncoder import GraphEncoder
 
 
 class ConditionalUnetGraphDenoiser(nn.Module):
-    def __init__(self, in_ch, out_ch, max_input_dim, graph_data: torch_geometric.data.Data, time_dim=128, device="cuda"):
+    def __init__(self, in_ch, out_ch, max_input_dim, num_nodes, embedding_dim, hidden_dim, time_dim=128, device="cuda"):
         super().__init__()
         self.device = device
         self.time_dim = time_dim
         self.max_input_dim = max_input_dim
-        self.graph_data = graph_data
 
+        # generated output u-net layers
         self.inc = DoubleConv(in_ch, 64)
-        self.down1 = GraphDown(64, 128, self.graph_data,
-                               node_embed_dim=512, graph_hidden_dim=256, emb_dim=time_dim)
+        self.down1 = Down(64, 128, emb_dim=time_dim)
         self.sa1 = SelfAttention(128, max_input_dim // 2)
-        self.down2 = GraphDown(128, 256, self.graph_data,
-                               node_embed_dim=1024, graph_hidden_dim=512, emb_dim=time_dim)
+        self.down2 = Down(128, 256, emb_dim=time_dim)
         self.sa2 = SelfAttention(256, max_input_dim // 4)
-        self.down3 = GraphDown(256, 256, self.graph_data,
-                               node_embed_dim=1024, graph_hidden_dim=512, emb_dim=time_dim)
+        self.down3 = Down(256, 256, emb_dim=time_dim)
         self.sa3 = SelfAttention(256, max_input_dim // 8)
 
         self.bot1 = DoubleConv(256, 512)
         self.bot2 = DoubleConv(512, 512)
         self.bot3 = DoubleConv(512, 256)
 
-        self.up1 = GraphUp(512, 128, self.graph_data,
-                           node_embed_dim=512, graph_hidden_dim=256, emb_dim=time_dim)
+        self.up1 = Up(512, 128, emb_dim=time_dim)
         self.sa4 = SelfAttention(128, max_input_dim // 4)
-        self.up2 = GraphUp(256, 64, self.graph_data,
-                           node_embed_dim=256, graph_hidden_dim=128, emb_dim=time_dim)
+        self.up2 = Up(256, 64, emb_dim=time_dim)
         self.sa5 = SelfAttention(64, max_input_dim // 2)
-        self.up3 = GraphUp(128, 64, self.graph_data,
-                           node_embed_dim=256, graph_hidden_dim=128,  emb_dim=time_dim)
+        self.up3 = Up(128, 64, emb_dim=time_dim)
         self.sa6 = SelfAttention(64, max_input_dim)
 
+        # guidance sk trace u-net layers
         self.inc_cond = DoubleConv(in_ch, 64)
         self.down1_cond = Down(64, 128, emb_dim=time_dim)
         self.sa1_cond = SelfAttention(128, max_input_dim // 2)
@@ -61,6 +57,10 @@ class ConditionalUnetGraphDenoiser(nn.Module):
         self.sa5_cond = SelfAttention(64, max_input_dim // 2)
         self.up3_cond = Up(128, 64, emb_dim=time_dim)
         self.sa6_cond = SelfAttention(64, max_input_dim)
+
+        self.graph_enc1 = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=64)
+        self.graph_enc2 = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=128)
+        self.graph_enc3 = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=256)
 
         self.outc = nn.Conv1d(64, out_ch, kernel_size=1)
 
@@ -145,7 +145,7 @@ class ConditionalUnetGraphDenoiser(nn.Module):
 
         return x
 
-    def forward(self, x, t, y=None):
+    def forward(self, x, t, y=None, g=None):
         if y is not None:
             return self._forward_cond(x, y, t)
         else:

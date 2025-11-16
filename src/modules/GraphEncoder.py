@@ -10,8 +10,8 @@ class GraphEncoder(nn.Module):
         super().__init__()
         self.embedding = nn.Embedding(num_nodes, embedding_dim)
         self.pool_func = global_add_pool if pooling == 'add' else global_mean_pool
-        self.encoder = nn.Sequential(
-            *[GINConv(
+        self.convs = nn.ModuleList(
+            [GINConv(
                 nn.Sequential(
                     nn.Linear(embedding_dim, hidden_dim),
                     nn.BatchNorm1d(hidden_dim),
@@ -43,7 +43,8 @@ class GraphEncoder(nn.Module):
     def forward(self, data):
         x, edge_index = data.x, data.edge_index
         x = self.embedding(x).squeeze(1)
-        x = self.encoder(x, edge_index)
+        for conv in self.convs:
+            x = conv(x, edge_index)
         x = self.pool_func(x, batch=torch.zeros(x.size(0), dtype=torch.long, device=x.device))
         x = self.out(x)
         return x

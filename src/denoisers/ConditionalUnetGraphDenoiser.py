@@ -58,9 +58,13 @@ class ConditionalUnetGraphDenoiser(nn.Module):
         self.up3_cond = Up(128, 64, emb_dim=time_dim)
         self.sa6_cond = SelfAttention(64, max_input_dim)
 
-        self.graph_enc1 = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=64)
-        self.graph_enc2 = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=128)
-        self.graph_enc3 = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=256)
+        self.genc1 = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=64)
+        self.genc2 = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=128)
+        self.genc3 = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=256)
+
+        self.genc1_cond = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=64)
+        self.genc2_cond = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=128)
+        self.genc3_cond = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=256)
 
         self.outc = nn.Conv1d(64, out_ch, kernel_size=1)
 
@@ -74,7 +78,7 @@ class ConditionalUnetGraphDenoiser(nn.Module):
         pos_enc = torch.cat([pos_enc_a, pos_enc_b], dim=-1)
         return pos_enc
 
-    def _forward_uncond(self, x, t):
+    def _forward_uncond_no_graph(self, x, t):
         t = t.unsqueeze(-1).type(torch.float)
         t = self.pos_encoding(t, self.time_dim)
 
@@ -91,19 +95,15 @@ class ConditionalUnetGraphDenoiser(nn.Module):
         x4 = self.bot3(x4)
 
         x = self.up1(x4, x3, t)
-        del x4
-        del x3
         x = self.sa4(x)
         x = self.up2(x, x2, t)
-        del x2
         x = self.sa5(x)
         x = self.up3(x, x1, t)
-        del x1
         x = self.sa6(x)
         x = self.outc(x)
         return x
 
-    def _forward_cond(self, x, y, t):
+    def _forward_cond_no_graph(self, x, y, t):
         t = t.unsqueeze(-1).type(torch.float)
         t = self.pos_encoding(t, self.time_dim)
 
@@ -145,8 +145,95 @@ class ConditionalUnetGraphDenoiser(nn.Module):
 
         return x
 
+    def _forward_uncond_graph(self, x, g, t):
+        t = t.unsqueeze(-1).type(torch.float)
+        t = self.pos_encoding(t, self.time_dim)
+
+        batch_size = x.size(0)
+
+        x1 = self.inc(x)
+        g1 = self.genc1(g).view(1, -1, 1).repeat(batch_size, 1, x1.size(2))
+        x2 = self.down1(x1 + g1, t)
+        x2 = self.sa1(x2)
+        g2 = self.genc2(g).view(1, -1, 1).repeat(batch_size, 1, x2.size(2))
+        x3 = self.down2(x2 + g2, t)
+        x3 = self.sa2(x3)
+        g3 = self.genc3(g).view(1, -1, 1).repeat(batch_size, 1, x3.size(2))
+        x4 = self.down3(x3 + g3, t)
+        x4 = self.sa3(x4)
+
+        x4 = self.bot1(x4)
+        x4 = self.bot2(x4)
+        x4 = self.bot3(x4)
+
+        x = self.up1(x4, x3, t)
+        x = self.sa4(x)
+        x = self.up2(x, x2, t)
+        x = self.sa5(x)
+        x = self.up3(x, x1, t)
+        x = self.sa6(x)
+        x = self.outc(x)
+
+        return x
+
+    def _forward_cond_graph(self, x, y, g, t):
+        t = t.unsqueeze(-1).type(torch.float)
+        t = self.pos_encoding(t, self.time_dim)
+
+        batch_size = x.size(0)
+
+        y1 = self.inc_cond(y)
+        x1 = self.inc(x)
+        g1 = self.genc1(g).view(1, -1, 1).repeat(batch_size, 1, x1.size(2))
+        g1_cond = self.genc1_cond(g).view(1, -1, 1).repeat(batch_size, 1, y1.size(2))
+        x2 = self.down1(x1 + y1 + g1, t)
+        y2 = self.down1_cond(x1 + y1 + g1_cond, t)
+        y2 = self.sa1_cond(y2)
+        x2 = self.sa1(x2)
+        g2 = self.genc2(g).view(1, -1, 1).repeat(batch_size, 1, x2.size(2))
+        g2_cond = self.genc2_cond(g).view(1, -1, 1).repeat(batch_size, 1, y2.size(2))
+        x3 = self.down2(x2 + y2 + g2, t)
+        y3 = self.down2_cond(x2 + y2 + g2_cond, t)
+        y3 = self.sa2_cond(y3)
+        x3 = self.sa2(x3)
+        g3 = self.genc3(g).view(1, -1, 1).repeat(batch_size, 1, x3.size(2))
+        g3_cond = self.genc3_cond(g).view(1, -1, 1).repeat(batch_size, 1, y3.size(2))
+        x4 = self.down3(x3 + y3 + g3, t)
+        x4 = self.sa3(x4)
+        y4 = self.down3_cond(x3 + y3 + g3_cond, t)
+        y4 = self.sa3_cond(y4)
+
+        x4 = self.bot1(x4)
+        x4 = self.bot2(x4)
+        x4 = self.bot3(x4)
+        y4 = self.bot1_cond(y4)
+        y4 = self.bot2_cond(y4)
+        y4 = self.bot3_cond(y4)
+
+        y = self.up1(x4 + y4, y3, t)
+        x = self.up1(x4 + y4, x3, t)
+        x = self.sa4(x)
+        y = self.sa4(y)
+        x_next = self.up2(x + y, x2, t)
+        y_next = self.up2(x + y, y2, t)
+        y_next = self.sa5(y_next)
+        x_next = self.sa5(x_next)
+        x = self.up3(x_next + y_next, x1, t)
+        y = self.up3(x_next + y_next, y1, t)
+        y = self.sa6(y)
+        x = self.sa6(x)
+        x = self.outc(x + y)
+
+        return x
+
     def forward(self, x, t, y=None, g=None):
-        if y is not None:
-            return self._forward_cond(x, y, t)
+        if g is not None:
+            if y is not None:
+                return self._forward_cond_graph(x, y, g, t)
+            else:
+                return self._forward_uncond_graph(x, g, t)
         else:
-            return self._forward_uncond(x, t)
+            if y is not None:
+                return self._forward_cond_no_graph(x, y, t)
+            else:
+                return self._forward_uncond_no_graph(x, t)

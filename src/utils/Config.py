@@ -21,7 +21,8 @@ class Config:
     mode: str = None
     predict_on: str = None
     seed: int = None
-    enable_matrix: bool = None
+    enable_matrix: bool = False
+    enable_gnn: bool = False
     gamma: float = None
     matrix_type: str = None
     activity_names: dict[int, str] = None

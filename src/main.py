@@ -19,10 +19,12 @@ from dataset.dataset import SaladsDataset
 from ddpm.ddpm_multinomial import Diffusion
 from denoisers.ConditionalUnetDenoiser import ConditionalUnetDenoiser
 from denoisers.ConditionalUnetMatrixDenoiser import ConditionalUnetMatrixDenoiser
+from denoisers.ConditionalUnetGraphDenoiser import ConditionalUnetGraphDenoiser
 from utils.initialization import initialize
 from utils.pm_utils import discover_dk_process, remove_duplicates_dataset, pad_to_multiple_of_n, conformance_measure
 from utils.graph_utils import get_process_model_reachability_graph_transition_matrix, \
-    get_process_model_petri_net_transition_matrix, get_process_model_reachability_graph_transition_multimatrix
+    get_process_model_petri_net_transition_matrix, get_process_model_reachability_graph_transition_multimatrix, \
+    prepare_process_model_for_gnn
 
 warnings.filterwarnings("ignore")
 
@@ -264,9 +266,11 @@ def main():
             rg_transition_matrix = torch.tensor(rg_transition_matrix, device=cfg.device).unsqueeze(0).float()
         elif cfg.matrix_type == "rg":
             rg_nx, rg_transition_matrix = get_process_model_reachability_graph_transition_multimatrix(dk_process_model,
-                                                                                                 dk_init_marking)
+                                                                                                      dk_init_marking)
             rg_transition_matrix = torch.tensor(rg_transition_matrix, device=cfg.device).float()
         rg_transition_matrix = pad_to_multiple_of_n(rg_transition_matrix)
+    if cfg.enable_gnn:
+        pm_nx_data = prepare_process_model_for_gnn(dk_process_model, dk_init_marking, dk_final_marking, cfg)
 
     train_loader = DataLoader(
         train_dataset,
@@ -290,6 +294,11 @@ def main():
                                                  gamma=cfg.gamma,
                                                  matrix_out_channels=rg_transition_matrix.shape[0],
                                                  device=cfg.device).to(cfg.device).float()
+    elif cfg.enable_gnn:
+        denoiser = ConditionalUnetGraphDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
+                                                max_input_dim=salads_dataset.sequence_length,
+                                                num_nodes=pm_nx_data.num_nodes,
+                                                embedding_dim=128, hidden_dim=128).to(cfg.device).float()
     else:
         denoiser = ConditionalUnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
                                            max_input_dim=salads_dataset.sequence_length,

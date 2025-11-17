@@ -1,6 +1,6 @@
 {
-  "data_path": "../data/pickles/50_salads_24_sample.pkl",
-  "summary_path": "../final_runs/50_salads_sktr_24",
+  "data_path": "data/pickles/50_salads_unified.pkl",
+  "summary_path": "runs/50_salads_gnn",
   "device": "cuda:0",
   "parallelize": false,
   "num_epochs": 3000,
@@ -17,7 +17,8 @@
   "mode": "cond",
   "predict_on": "original",
   "seed": 42,
-  "enable_matrix": true,
+  "enable_matrix": false,
+  "enable_gnn": true,
   "gamma": 0.5,
   "matrix_type": "rg",
   "activity_names": {

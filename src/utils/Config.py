@@ -16,7 +16,7 @@ class Config:
     num_classes: int = None
     batch_size: int = None
     conditional_dropout: float = None
-    matrix_dropout: float = None
+    matrix_dropout: float = None  # also used for graph dropout
     eval_train: bool = None
     mode: str = None
     predict_on: str = None

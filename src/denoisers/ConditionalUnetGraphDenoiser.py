@@ -12,11 +12,14 @@ from modules.GraphEncoder import GraphEncoder
 
 
 class ConditionalUnetGraphDenoiser(nn.Module):
-    def __init__(self, in_ch, out_ch, max_input_dim, num_nodes, embedding_dim, hidden_dim, time_dim=128, device="cuda"):
+    def __init__(self, in_ch, out_ch, max_input_dim, num_nodes, graph_data,
+                 embedding_dim, hidden_dim, time_dim=128, device="cuda"):
         super().__init__()
         self.device = device
         self.time_dim = time_dim
         self.max_input_dim = max_input_dim
+        self.graph_data = graph_data
+        self.loss = nn.CrossEntropyLoss()
 
         # generated output u-net layers
         self.inc = DoubleConv(in_ch, 64)
@@ -145,11 +148,12 @@ class ConditionalUnetGraphDenoiser(nn.Module):
 
         return x
 
-    def _forward_uncond_graph(self, x, g, t):
+    def _forward_uncond_graph(self, x, t):
         t = t.unsqueeze(-1).type(torch.float)
         t = self.pos_encoding(t, self.time_dim)
 
         batch_size = x.size(0)
+        g = self.graph_data
 
         x1 = self.inc(x)
         g1 = self.genc1(g).view(1, -1, 1).repeat(batch_size, 1, x1.size(2))
@@ -176,11 +180,12 @@ class ConditionalUnetGraphDenoiser(nn.Module):
 
         return x
 
-    def _forward_cond_graph(self, x, y, g, t):
+    def _forward_cond_graph(self, x, y, t):
         t = t.unsqueeze(-1).type(torch.float)
         t = self.pos_encoding(t, self.time_dim)
 
         batch_size = x.size(0)
+        g = self.graph_data
 
         y1 = self.inc_cond(y)
         x1 = self.inc(x)
@@ -226,14 +231,16 @@ class ConditionalUnetGraphDenoiser(nn.Module):
 
         return x
 
-    def forward(self, x, t, y=None, g=None):
-        if g is not None:
+    def forward(self, x, t, gt_x, gt_m, y=None, drop_graph=False):
+        if not drop_graph:
             if y is not None:
-                return self._forward_cond_graph(x, y, g, t)
+                x_hat = self._forward_cond_graph(x, y, t)
             else:
-                return self._forward_uncond_graph(x, g, t)
+                x_hat = self._forward_uncond_graph(x, t)
         else:
             if y is not None:
-                return self._forward_cond_no_graph(x, y, t)
+                x_hat = self._forward_cond_no_graph(x, y, t)
             else:
-                return self._forward_uncond_no_graph(x, t)
+                x_hat = self._forward_uncond_no_graph(x, t)
+        loss = self.loss(x_hat, gt_x) if gt_x is not None else None
+        return x_hat, None, loss, loss.item() if loss is not None else None, 0

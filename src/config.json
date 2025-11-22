@@ -17,10 +17,10 @@
   "mode": "cond",
   "predict_on": "original",
   "seed": 42,
-  "enable_matrix": false,
-  "enable_gnn": true,
+  "enable_matrix": true,
+  "enable_gnn": false,
   "gamma": 0.5,
-  "matrix_type": "rg",
+  "matrix_type": "pm",
   "activity_names": {
     "0": "cut_tomato",
     "1": "place_tomato_into_bowl",

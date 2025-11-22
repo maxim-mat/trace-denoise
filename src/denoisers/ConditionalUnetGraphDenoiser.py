@@ -66,18 +66,18 @@ class ConditionalUnetGraphDenoiser(nn.Module):
         self.genc1 = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=64, pooling=pooling)
         self.genc2 = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=128, pooling=pooling)
         self.genc3 = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=256, pooling=pooling)
-        self.genc3 = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=256, pooling=pooling)
-        self.genc3 = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=128, pooling=pooling)
-        self.genc3 = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=64, pooling=pooling)
+        self.genc4 = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=256, pooling=pooling)
+        self.genc5 = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=128, pooling=pooling)
+        self.genc6 = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=64, pooling=pooling)
 
         self.genc1_cond = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=64, pooling=pooling)
         self.genc2_cond = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=128, pooling=pooling)
         self.genc3_cond = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=256, pooling=pooling)
-        self.genc3_cond = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=256, pooling=pooling)
-        self.genc3_cond = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=128, pooling=pooling)
-        self.genc3_cond = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=64, pooling=pooling)
+        self.genc4_cond = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=256, pooling=pooling)
+        self.genc5_cond = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=128, pooling=pooling)
+        self.genc6_cond = GraphEncoder(num_nodes, embedding_dim, hidden_dim, output_dim=64, pooling=pooling)
 
-        if self.pool_func is None:
+        if self.gnn_pooling is None:
             self.ca1 = CrossAttention(128, max_input_dim // 2)
             self.ca2 = CrossAttention(256, max_input_dim // 4)
             self.ca3 = CrossAttention(256, max_input_dim // 8)
@@ -180,29 +180,30 @@ class ConditionalUnetGraphDenoiser(nn.Module):
 
         x1 = self.inc(x)
         if self.gnn_pooling is None:
-            g1 = self.genc1(g).view(batch_size, x1.shape[1], -1)
+            # g1 = self.genc1(g).view(batch_size, x1.shape[1], -1)
             x2 = self.down1(x1, t)
             x2 = self.sa1(x2)
-            x2 = self.ca1(x2, g1, g1)
-        else:
-            g1 = self.genc1(g).view(1, -1, 1).repeat(batch_size, 1, x1.size(2))
-            x2 = self.down1(x1 + g1, t)
-            x2 = self.sa1(x2)
-        if self.gnn_pooling is None:
-            g2 = self.genc2(g).view(batch_size, x2.shape[1], -1)
+            g2 = self.genc2(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
+            x2 = self.ca1(x2, g2, g2)
+
             x3 = self.down2(x2, t)
             x3 = self.sa2(x3)
-            x3 = self.ca2(x3, g2, g2)
+            g3 = self.genc3(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
+            x3 = self.ca2(x3, g3, g3)
+
+            x4 = self.down3(x3, t)
+            x4 = self.sa3(x4)
+            g4 = self.genc4(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
+            x4 = self.ca3(x4, g4, g4)
         else:
+            # g1 = self.genc1(g).view(1, -1, 1).repeat(batch_size, 1, x1.size(2))
+            x2 = self.down1(x1, t)
+            x2 = self.sa1(x2)
+
             g2 = self.genc2(g).view(1, -1, 1).repeat(batch_size, 1, x2.size(2))
             x3 = self.down2(x2 + g2, t)
             x3 = self.sa2(x3)
-        if self.gnn_pooling is None:
-            g3 = self.genc3(g).view(batch_size, x3.shape[1], -1)
-            x4 = self.down3(x3, t)
-            x4 = self.sa3(x4)
-            x4 = self.ca3(x4, g3, g3)
-        else:
+
             g3 = self.genc3(g).view(1, -1, 1).repeat(batch_size, 1, x3.size(2))
             x4 = self.down3(x3 + g3, t)
             x4 = self.sa3(x4)
@@ -212,34 +213,32 @@ class ConditionalUnetGraphDenoiser(nn.Module):
         x4 = self.bot3(x4)
 
         if self.gnn_pooling is None:
-            g4 = self.genc4(g).view(batch_size, x4.shape[1], -1)
             x = self.up1(x4, x3, t)
             x = self.sa4(x)
-            x = self.ca4(x, g4, g4)
+
+            g5 = self.genc5(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
+            x = self.ca4(x, g5, g5)
+            x = self.up2(x, x2, t)
+            x = self.sa5(x)
+
+            g6 = self.genc6(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
+            x = self.ca5(x, g6, g6)
+            x = self.up3(x, x1, t)
+            x = self.sa6(x)
         else:
             g4 = self.genc4(g).view(1, -1, 1).repeat(batch_size, 1, x4.size(2))
             x = self.up1(x4 + g4, x3, t)
             x = self.sa4(x)
-        if self.gnn_pooling is None:
-            g5 = self.genc5(g).view(batch_size, x.shape[1], -1)
-            x = self.up2(x4, x3, t)
-            x = self.sa5(x)
-            x = self.ca5(x, g5, g5)
-        else:
-            g5 = self.genc5(g).view(1, -1, 1).repeat(batch_size, 1, x.size(2))
-            x = self.up2(x4 + g5, x3, t)
-            x = self.sa5(x)
-        if self.gnn_pooling is None:
-            g6 = self.genc6(g).view(batch_size, x.shape[1], -1)
-            x = self.up3(x4, x3, t)
-            x = self.sa6(x)
-            x = self.ca6(x, g6, g6)
-        else:
-            g6 = self.genc6(g).view(1, -1, 1).repeat(batch_size, 1, x.size(2))
-            x = self.up3(x4 + g6, x3, t)
-            x = self.sa6(x)
-        x = self.outc(x)
 
+            g5 = self.genc5(g).view(1, -1, 1).repeat(batch_size, 1, x.size(2))
+            x = self.up2(x + g5, x2, t)
+            x = self.sa5(x)
+
+            g6 = self.genc6(g).view(1, -1, 1).repeat(batch_size, 1, x.size(2))
+            x = self.up3(x + g6, x1, t)
+            x = self.sa6(x)
+
+        x = self.outc(x)
         return x
 
     def _forward_cond_graph(self, x, y, t):
@@ -249,26 +248,56 @@ class ConditionalUnetGraphDenoiser(nn.Module):
         batch_size = x.size(0)
         g = self.graph_data
 
-        y1 = self.inc_cond(y)
         x1 = self.inc(x)
-        g1 = self.genc1(g).view(1, -1, 1).repeat(batch_size, 1, x1.size(2))
-        g1_cond = self.genc1_cond(g).view(1, -1, 1).repeat(batch_size, 1, y1.size(2))
-        x2 = self.down1(x1 + y1 + g1, t)
-        y2 = self.down1_cond(x1 + y1 + g1_cond, t)
-        y2 = self.sa1_cond(y2)
-        x2 = self.sa1(x2)
-        g2 = self.genc2(g).view(1, -1, 1).repeat(batch_size, 1, x2.size(2))
-        g2_cond = self.genc2_cond(g).view(1, -1, 1).repeat(batch_size, 1, y2.size(2))
-        x3 = self.down2(x2 + y2 + g2, t)
-        y3 = self.down2_cond(x2 + y2 + g2_cond, t)
-        y3 = self.sa2_cond(y3)
-        x3 = self.sa2(x3)
-        g3 = self.genc3(g).view(1, -1, 1).repeat(batch_size, 1, x3.size(2))
-        g3_cond = self.genc3_cond(g).view(1, -1, 1).repeat(batch_size, 1, y3.size(2))
-        x4 = self.down3(x3 + y3 + g3, t)
-        x4 = self.sa3(x4)
-        y4 = self.down3_cond(x3 + y3 + g3_cond, t)
-        y4 = self.sa3_cond(y4)
+        y1 = self.inc_cond(y)
+        if self.gnn_pooling is None:
+            # g1 = self.genc1(g).view(batch_size, x1.shape[1], -1)
+            x2 = self.down1(x1 + y1, t)
+            x2 = self.sa1(x2)
+            y2 = self.down1_cond(y1 + x1, t)
+            y2 = self.sa1_cond(y2)
+            g2 = self.genc2(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
+            g2_cond = self.genc2_cond(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
+            x2 = self.ca1(x2, g2, g2)
+            y2 = self.ca1_cond(y2, g2_cond, g2_cond)
+
+            x3 = self.down2(x2 + y2, t)
+            x3 = self.sa2(x3)
+            y3 = self.down2_cond(y2 + x2, t)
+            y3 = self.sa2_cond(y3)
+            g3 = self.genc3(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
+            g3_cond = self.genc3_cond(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
+            x3 = self.ca2(x3, g3, g3)
+            y3 = self.ca2_cond(y3, g3_cond, g3_cond)
+
+            x4 = self.down3(x3 + y3, t)
+            x4 = self.sa3(x4)
+            y4 = self.down3_cond(y3 + x3, t)
+            y4 = self.sa3_cond(y4)
+            g4 = self.genc4(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
+            g4_cond = self.genc4_cond(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
+            x4 = self.ca3(x4, g4, g4)
+            y4 = self.ca3_cond(y4, g4_cond, g4_cond)
+        else:
+            # g1 = self.genc1(g).view(1, -1, 1).repeat(batch_size, 1, x1.size(2))
+            x2 = self.down1(x1 + y1, t)
+            x2 = self.sa1(x2)
+            y2 = self.down1_cond(y1 + x1, t)
+            y2 = self.sa1_cond(y2)
+            g2 = self.genc2(g).view(1, -1, 1).repeat(batch_size, 1, x2.size(2))
+            g2_cond = self.genc2_cond(g).view(1, -1, 1).repeat(batch_size, 1, y2.size(2))
+
+            x3 = self.down2(x2 + y2 + g2, t)
+            x3 = self.sa2(x3)
+            y3 = self.down2_cond(y2 + x2 + g2_cond, t)
+            y3 = self.sa2_cond(y3)
+            g3 = self.genc3(g).view(1, -1, 1).repeat(batch_size, 1, x3.size(2))
+            g3_cond = self.genc3_cond(g).view(1, -1, 1).repeat(batch_size, 1, y3.size(2))
+
+            x4 = self.down3(x3 + y3 + g3, t)
+            x4 = self.sa3(x4)
+            y4 = self.down3_cond(y3 + x3 + g3_cond, t)
+            y4 = self.sa3_cond(y4)
 
         x4 = self.bot1(x4)
         x4 = self.bot2(x4)
@@ -277,20 +306,52 @@ class ConditionalUnetGraphDenoiser(nn.Module):
         y4 = self.bot2_cond(y4)
         y4 = self.bot3_cond(y4)
 
-        y = self.up1(x4 + y4, y3, t)
-        x = self.up1(x4 + y4, x3, t)
-        x = self.sa4(x)
-        y = self.sa4(y)
-        x_next = self.up2(x + y, x2, t)
-        y_next = self.up2(x + y, y2, t)
-        y_next = self.sa5(y_next)
-        x_next = self.sa5(x_next)
-        x = self.up3(x_next + y_next, x1, t)
-        y = self.up3(x_next + y_next, y1, t)
-        y = self.sa6(y)
-        x = self.sa6(x)
-        x = self.outc(x + y)
+        if self.gnn_pooling is None:
+            x = self.up1(x4 + y4, x3, t)
+            x = self.sa4(x)
+            y = self.up1_cond(y4 + x4, y3, t)
+            y = self.sa4_cond(y)
+            g5 = self.genc5(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
+            g5_cond = self.genc5_cond(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
+            x = self.ca4(x, g5, g5)
+            y = self.ca4_cond(y, g5_cond, g5_cond)
 
+            x_next = self.up2(x + y, x2, t)
+            x_next = self.sa5(x_next)
+            y = self.up2_cond(y + x, y2, t)
+            y = self.sa5_cond(y)
+            g6 = self.genc6(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
+            g6_cond = self.genc6_cond(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
+            x = self.ca5(x_next, g6, g6)
+            y = self.ca5_cond(y, g6_cond, g6_cond)
+
+            x_next = self.up3(x + y, x1, t)
+            y = self.up3_cond(y + x, y1, t)
+            x = self.sa6(x_next)
+            y = self.sa6_cond(y)
+        else:
+            g4 = self.genc4(g).view(1, -1, 1).repeat(batch_size, 1, x4.size(2))
+            g4_cond = self.genc4_cond(g).view(1, -1, 1).repeat(batch_size, 1, y4.size(2))
+            x = self.up1(x4 + y4 + g4, x3, t)
+            x = self.sa4(x)
+            y = self.up1_cond(y4 + x4 + g4_cond, y3, t)
+            y = self.sa4_cond(y)
+
+            g5 = self.genc5(g).view(1, -1, 1).repeat(batch_size, 1, x.size(2))
+            g5_cond = self.genc5_cond(g).view(1, -1, 1).repeat(batch_size, 1, y.size(2))
+            x_next = self.up2(x + y + g5, x2, t)
+            x_next = self.sa5(x_next)
+            y = self.up2_cond(y + x + g5_cond, y2, t)
+            y = self.sa5_cond(y)
+
+            g6 = self.genc6(g).view(1, -1, 1).repeat(batch_size, 1, x.size(2))
+            g6_cond = self.genc6_cond(g).view(1, -1, 1).repeat(batch_size, 1, y.size(2))
+            x = self.up3(x_next + y + g6, x1, t)
+            x = self.sa6(x)
+            y = self.up3_cond(y + x_next + g6_cond, y1, t)
+            y = self.sa6_cond(y)
+
+        x = self.outc(x + y)
         return x
 
     def forward(self, x, t, gt_x, gt_m, y=None, drop_graph=False):

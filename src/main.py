@@ -300,7 +300,7 @@ def main():
                                                 max_input_dim=salads_dataset.sequence_length,
                                                 num_nodes=pm_nx_data.num_nodes,
                                                 graph_data=pm_nx_data,
-                                                embedding_dim=128, hidden_dim=128).to(cfg.device).float()
+                                                embedding_dim=128, hidden_dim=128, pooling=cfg.gnn_pooling).to(cfg.device).float()
     else:
         denoiser = ConditionalUnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
                                            max_input_dim=salads_dataset.sequence_length,

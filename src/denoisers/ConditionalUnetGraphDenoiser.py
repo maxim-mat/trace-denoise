@@ -21,6 +21,7 @@ class ConditionalUnetGraphDenoiser(nn.Module):
         self.max_input_dim = max_input_dim
         self.graph_data = graph_data
         self.gnn_pooling = pooling
+        self.alpha = 0
         self.loss = nn.CrossEntropyLoss()
 
         # generated output u-net layers

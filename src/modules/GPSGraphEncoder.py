@@ -5,6 +5,7 @@ from torch_geometric.nn import (
     global_mean_pool,
 )
 from torch_geometric.utils import add_self_loops
+from modules.GPSLayer import GPSLayer
 
 
 class GPSGraphEncoder(nn.Module):
@@ -126,7 +127,7 @@ class GPSGraphEncoder(nn.Module):
 
         # Node features
         x = self.encode_nodes(data)  # [N, hidden_dim]
-        batch = data.batch
+        batch = data.batch if data.batch is not None else torch.zeros(x.size(0), dtype=torch.long, device=x.device)
 
         # Ensure self-loops exist (helps attention / stability)
         edge_index, _ = add_self_loops(data.edge_index, num_nodes=x.size(0))

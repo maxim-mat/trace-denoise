@@ -1,6 +1,5 @@
 import torch
 import torch.nn as nn
-import torch_geometric
 
 from modules.DoubleConv import DoubleConv
 from modules.SelfAttention import SelfAttention

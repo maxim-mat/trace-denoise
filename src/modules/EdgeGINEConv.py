@@ -1,3 +1,6 @@
+import torch.nn as nn
+from torch_geometric.nn import GINEConv
+
 class EdgeGINEConv(nn.Module):
     """
     GINEConv wrapper: local message passing that uses edge_attr.

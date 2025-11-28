@@ -1,3 +1,9 @@
+import torch.nn as nn
+from modules.EdgeGINEConv import EdgeGINEConv
+from modules.GraphTransformerLayer import GraphTransformerLayer
+from torch_geometric.nn import global_mean_pool
+
+
 class GPSLayer(nn.Module):
     """
     One GPS-style block:

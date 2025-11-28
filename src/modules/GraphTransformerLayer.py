@@ -1,3 +1,6 @@
+import torch.nn as nn
+
+
 class GraphTransformerLayer(nn.Module):
     """
     Global attention over nodes with graph-wise masking.

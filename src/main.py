@@ -14,6 +14,8 @@ from tensorboardX import SummaryWriter
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+import time
+from datetime import timedelta
 
 from dataset.dataset import SaladsDataset
 from ddpm.ddpm_multinomial import Diffusion
@@ -311,11 +313,16 @@ def main():
     optimizer = AdamW(denoiser.parameters(), cfg.learning_rate)
     summary = SummaryWriter(cfg.summary_path)
 
+    start_time = time.perf_counter()
+
     (train_losses, test_losses, test_dist, test_acc, test_precision, tests_recall, test_f1, test_auc, train_acc,
      train_recall, train_precision, train_f1, train_auc, train_dist, train_seq_loss, train_mat_loss, test_seq_loss,
      test_mat_loss, train_alpha, test_alpha, train_alignment, test_alignment) = \
         train(diffuser, denoiser, optimizer, train_loader, test_loader, rg_transition_matrix,
               dk_process_model, dk_init_marking, dk_final_marking, cfg, summary, logger)
+
+    end_time = time.perf_counter()
+    elapsed = end_time - start_time
 
     px.line(train_losses).write_html(os.path.join(cfg.summary_path, "train_loss.html"))
     px.line(test_losses).write_html(os.path.join(cfg.summary_path, "test_loss.html"))
@@ -341,6 +348,7 @@ def main():
     px.line(test_alignment).write_html(os.path.join(cfg.summary_path, "test_alignment.html"))
 
     final_results = {
+        "elapsed_time": timedelta(seconds=elapsed),
         "train":
             {
                 "loss": train_losses[-1],

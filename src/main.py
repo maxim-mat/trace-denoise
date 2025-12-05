@@ -348,7 +348,7 @@ def main():
     px.line(test_alignment).write_html(os.path.join(cfg.summary_path, "test_alignment.html"))
 
     final_results = {
-        "elapsed_time": timedelta(seconds=elapsed),
+        "elapsed_time": str(timedelta(seconds=elapsed)),
         "train":
             {
                 "loss": train_losses[-1],

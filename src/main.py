@@ -252,15 +252,18 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
 
 def main():
     args, cfg, dataset, logger = initialize()
+    logger.info("loading dataset")
     salads_dataset = SaladsDataset(dataset['target'], dataset['stochastic'])
     train_dataset, test_dataset = train_test_split(salads_dataset, train_size=cfg.train_percent, shuffle=True,
                                                    random_state=cfg.seed)
     logger.info(f"train size: {len(train_dataset)} test size: {len(test_dataset)}")
     # random initialization instead of None for compatibility, isn't used in any way if enable_matrix is false
     rg_transition_matrix = torch.randn((cfg.num_classes, 2, 2)).to(cfg.device)
+    logger.info("discovering process")
     dk_process_model, dk_init_marking, dk_final_marking = discover_dk_process(train_dataset, cfg,
                                                                               preprocess=remove_duplicates_dataset)
     if cfg.enable_matrix:
+        logger.info("creating flow matrix")
         if cfg.matrix_type == "pm":
             rg_nx, rg_transition_matrix = get_process_model_petri_net_transition_matrix(dk_process_model,
                                                                                         dk_init_marking,
@@ -272,6 +275,7 @@ def main():
             rg_transition_matrix = torch.tensor(rg_transition_matrix, device=cfg.device).float()
         rg_transition_matrix = pad_to_multiple_of_n(rg_transition_matrix)
     if cfg.enable_gnn:
+        logger.info("creating process graph")
         pm_nx_data = prepare_process_model_for_gnn(dk_process_model, dk_init_marking, dk_final_marking,
                                                    cfg).to(cfg.device)
 
@@ -302,7 +306,7 @@ def main():
                                                 max_input_dim=salads_dataset.sequence_length,
                                                 num_nodes=pm_nx_data.num_nodes,
                                                 graph_data=pm_nx_data,
-                                                embedding_dim=128, hidden_dim=128, pooling=cfg.gnn_pooling).to(cfg.device).float()
+                                                embedding_dim=128, hidden_dim=128, pooling=cfg.gnn_pooling, device=cfg.device).to(cfg.device).float()
     else:
         denoiser = ConditionalUnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
                                            max_input_dim=salads_dataset.sequence_length,
@@ -342,8 +346,8 @@ def main():
     px.line(train_mat_loss).write_html(os.path.join(cfg.summary_path, "train_mat_loss.html"))
     px.line(test_seq_loss).write_html(os.path.join(cfg.summary_path, "test_seq_loss.html"))
     px.line(test_mat_loss).write_html(os.path.join(cfg.summary_path, "test_mat_loss.html"))
-    px.line(train_alpha).write_html(os.path.join(cfg.summary_path, "train_alpha.html"))
-    px.line(test_alpha).write_html(os.path.join(cfg.summary_path, "test_alpha.html"))
+    # px.line(train_alpha).write_html(os.path.join(cfg.summary_path, "train_alpha.html"))
+    # px.line(test_alpha).write_html(os.path.join(cfg.summary_path, "test_alpha.html"))
     px.line(train_alignment).write_html(os.path.join(cfg.summary_path, "train_alignment.html"))
     px.line(test_alignment).write_html(os.path.join(cfg.summary_path, "test_alignment.html"))
 

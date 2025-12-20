@@ -1,6 +1,6 @@
 {
-  "data_path": "../data/pickles/breakfast_unified.pkl",
-  "summary_path": "../final_runs_extended/breakfast_free",
+  "data_path": "data/pickles/breakfast_unified.pkl",
+  "summary_path": "runs/debugging",
   "device": "cuda:0",
   "parallelize": false,
   "num_epochs": 3000,
@@ -10,7 +10,7 @@
   "num_workers": 8,
   "test_every": 500,
   "num_classes": 49,
-  "batch_size": 4,
+  "batch_size": 3,
   "conditional_dropout": 0.1,
   "matrix_dropout": 0.1,
   "eval_train": true,
@@ -18,7 +18,8 @@
   "predict_on": "original",
   "seed": 42,
   "enable_matrix": false,
-  "enable_gnn": false,
+  "enable_gnn": true,
+  "hetero": true,
   "gamma": 0.5,
   "matrix_type": "pm",
   "activity_names": {

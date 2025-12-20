@@ -181,45 +181,6 @@ def prepare_process_model_for_gnn_ordered(process_model: pm4py.PetriNet, init_ma
     return from_networkx(model_nx)
 
 
-def prepare_process_model_for_hetero_gnn(process_model: pm4py.PetriNet, init_marking: pm4py.Marking,
-                                         final_marking: pm4py.Marking) -> Tuple[torch_geometric.data.HeteroData, Tuple]:
-    model_nx = pm4py.convert_petri_net_to_networkx(process_model, init_marking, final_marking)
-    activity_nodes = {t.name for t in process_model.transitions if t.label is not None}
-    hetero_data = HeteroData()
-
-    node_index = 0
-    node_to_index_map = {}
-    # this part is supposed to give activity nodes ids from 0 to number of activities and the rest to other nodes
-    for node in model_nx.nodes(data=True):
-        if node[0] in activity_nodes:
-            node[1]['x'] = [node_index]
-            node_to_index_map[node[0]] = node_index
-            node_index += 1
-    for node in model_nx.nodes(data=True):
-        if node[0] not in activity_nodes:
-            node[1]['x'] = [node_index]
-            node_to_index_map[node[0]] = node_index
-            node_index += 1
-
-    sorted_nodes = sorted(model_nx.nodes(data=True),
-                          key=lambda node: node[1]['x'])  # this should ensure that activity nodes are always first
-    transition_features = torch.tensor(
-        [node[1]['x'] for node in sorted_nodes if node[1]['attr']['type'] == 'transition'])
-    place_features = torch.tensor([node[1]['x'] for node in sorted_nodes if node[1]['attr']['type'] == 'place'])
-    hetero_data['transition'].x = transition_features.float()
-    hetero_data['place'].x = place_features.float()
-    edges_t_to_p = [(node_to_index_map[u], node_to_index_map[v]) for u, v in model_nx.edges() if
-                    model_nx.nodes[u]['attr']['type'] == 'transition']
-    edges_p_to_t = [(node_to_index_map[u], node_to_index_map[v]) for u, v in model_nx.edges() if
-                    model_nx.nodes[u]['attr']['type'] == 'place']
-    hetero_data['transition', 'transition_to_place', 'place'].edge_index = torch.tensor(edges_t_to_p).t()
-    hetero_data['place', 'place_to_transition', 'transition'].edge_index = torch.tensor(edges_p_to_t).t()
-
-    metadata = (['transition', 'place'],
-                [('transition', 'transition_to_place', 'place'), ('place', 'place_to_transition', 'transition')])
-    return hetero_data, metadata
-
-
 def get_process_model_reachability_graph_transition_matrix(process_model: pm4py.PetriNet, init_marking: pm4py.Marking):
     rg = reachability_graph.construct_reachability_graph(process_model, init_marking)
 

@@ -23,6 +23,7 @@ class Config:
     seed: int = None
     enable_matrix: bool = False
     enable_gnn: bool = False
+    hetero: bool = False
     gnn_pooling: str = None
     gamma: float = None
     matrix_type: str = None

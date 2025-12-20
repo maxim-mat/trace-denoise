@@ -22,11 +22,12 @@ from ddpm.ddpm_multinomial import Diffusion
 from denoisers.ConditionalUnetDenoiser import ConditionalUnetDenoiser
 from denoisers.ConditionalUnetMatrixDenoiser import ConditionalUnetMatrixDenoiser
 from denoisers.ConditionalUnetGraphDenoiser import ConditionalUnetGraphDenoiser
+from denoisers.ConditionalUnetHeteroGraphDenoiser import ConditionalUnetHeteroGraphDenoiser
 from utils.initialization import initialize
 from utils.pm_utils import discover_dk_process, remove_duplicates_dataset, pad_to_multiple_of_n, conformance_measure
 from utils.graph_utils import get_process_model_reachability_graph_transition_matrix, \
     get_process_model_petri_net_transition_matrix, get_process_model_reachability_graph_transition_multimatrix, \
-    prepare_process_model_for_gnn
+    prepare_process_model_for_gnn, prepare_process_model_for_heterognn
 
 warnings.filterwarnings("ignore")
 
@@ -276,8 +277,12 @@ def main():
         rg_transition_matrix = pad_to_multiple_of_n(rg_transition_matrix)
     if cfg.enable_gnn:
         logger.info("creating process graph")
-        pm_nx_data = prepare_process_model_for_gnn(dk_process_model, dk_init_marking, dk_final_marking,
-                                                   cfg).to(cfg.device)
+        if cfg.hetero:
+            pm_nx_data = prepare_process_model_for_heterognn(dk_process_model,
+                                                             dk_init_marking, dk_final_marking, cfg).to(cfg.device)
+        else:
+            pm_nx_data = prepare_process_model_for_gnn(dk_process_model,
+                                                       dk_init_marking, dk_final_marking, cfg).to(cfg.device)
 
     train_loader = DataLoader(
         train_dataset,
@@ -302,11 +307,19 @@ def main():
                                                  matrix_out_channels=rg_transition_matrix.shape[0],
                                                  device=cfg.device).to(cfg.device).float()
     elif cfg.enable_gnn:
-        denoiser = ConditionalUnetGraphDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
-                                                max_input_dim=salads_dataset.sequence_length,
-                                                num_nodes=pm_nx_data.num_nodes,
-                                                graph_data=pm_nx_data,
-                                                embedding_dim=128, hidden_dim=128, pooling=cfg.gnn_pooling, device=cfg.device).to(cfg.device).float()
+        if cfg.hetero:
+            denoiser = ConditionalUnetHeteroGraphDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
+                                                          max_input_dim=salads_dataset.sequence_length,
+                                                          graph_data=pm_nx_data, embedding_dim=128,
+                                                          hidden_dim=128, pooling=cfg.gnn_pooling,
+                                                          device=cfg.device).to(cfg.device).float()
+        else:
+            denoiser = ConditionalUnetGraphDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
+                                                    max_input_dim=salads_dataset.sequence_length,
+                                                    num_nodes=pm_nx_data.num_nodes,
+                                                    graph_data=pm_nx_data,
+                                                    embedding_dim=128, hidden_dim=128,
+                                                    pooling=cfg.gnn_pooling, device=cfg.device).to(cfg.device).float()
     else:
         denoiser = ConditionalUnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
                                            max_input_dim=salads_dataset.sequence_length,

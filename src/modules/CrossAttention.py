@@ -27,12 +27,12 @@ class CrossAttention(nn.Module):
         value = value.swapaxes(1, 2)
 
         query_ln = self.ln(query)
-        # key_ln = self.ln(key)
-        # value_ln = self.ln(value)
+        key_ln = self.ln(key)
+        value_ln = self.ln(value)
 
         queryln_proj = self.q_proj(query_ln)
-        key_proj = self.k_proj(key)
-        value_proj = self.v_proj(value)
+        key_proj = self.k_proj(key_ln)
+        value_proj = self.v_proj(value_ln)
 
         attention_value, _ = self.mha(queryln_proj, key_proj, value_proj)
         attention_value = self.out_proj(attention_value) + query  # Residual connection

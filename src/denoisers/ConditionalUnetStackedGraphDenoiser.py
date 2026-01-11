@@ -13,7 +13,7 @@ from modules.CrossAttention import CrossAttention
 
 class ConditionalUnetStackedGraphDenoiser(nn.Module):
     def __init__(self, in_ch, out_ch, max_input_dim, num_nodes, graph_data,
-                 embedding_dim, hidden_dim, pooling=None, time_dim=128, graph_dim=128, graph_levels=4, device="cuda"):
+                 embedding_dim, hidden_dim, pooling=None, time_dim=128, graph_dim=64, graph_levels=3, device="cuda"):
         super().__init__()
         self.device = device
         self.time_dim = time_dim
@@ -66,10 +66,12 @@ class ConditionalUnetStackedGraphDenoiser(nn.Module):
         self.up3_cond = Up(128, 64, emb_dim=time_dim)
         self.sa6_cond = SelfAttention(64, max_input_dim)
 
-        self.graph_encoders = nn.ModuleList([
-            GraphEncoder(num_nodes, embedding_dim, hidden_dim, num_layers=i + 1, output_dim=self.graph_dim,
-                         pooling=pooling)
-            for i in range(self.graph_levels)])
+        self.genc1 = GraphEncoder(num_nodes, embedding_dim, hidden_dim, num_layers=1, output_dim=self.graph_dim,
+                                  pooling=pooling)
+        self.genc2 = GraphEncoder(num_nodes, embedding_dim, hidden_dim, num_layers=2, output_dim=self.graph_dim,
+                                  pooling=pooling)
+        self.genc3 = GraphEncoder(num_nodes, embedding_dim, hidden_dim, num_layers=3, output_dim=self.graph_dim,
+                                  pooling=pooling)
 
         # self.genc1_cond = GraphEncoder(num_nodes, embedding_dim, hidden_dim, num_layers=1, output_dim=64, pooling=pooling)
         # self.genc2_cond = GraphEncoder(num_nodes, embedding_dim, hidden_dim, num_layers=2, output_dim=128, pooling=pooling)
@@ -78,12 +80,12 @@ class ConditionalUnetStackedGraphDenoiser(nn.Module):
         # self.genc5_cond = GraphEncoder(num_nodes, embedding_dim, hidden_dim, num_layers=2, output_dim=128, pooling=pooling)
         # self.genc6_cond = GraphEncoder(num_nodes, embedding_dim, hidden_dim, num_layers=1, output_dim=64, pooling=pooling)
 
-        self.ca1 = CrossAttention(channels=256, q_dim=128, kv_dim=self.graph_dim, size=max_input_dim // 2)
-        self.ca2 = CrossAttention(channels=256, q_dim=256, kv_dim=self.graph_dim, size=max_input_dim // 4)
-        self.ca3 = CrossAttention(channels=256, q_dim=256, kv_dim=self.graph_dim, size=max_input_dim // 8)
-        self.ca4 = CrossAttention(channels=256, q_dim=128, kv_dim=self.graph_dim, size=max_input_dim // 4)
-        self.ca5 = CrossAttention(channels=256, q_dim=64, kv_dim=self.graph_dim, size=max_input_dim // 2)
-        self.ca6 = CrossAttention(channels=256, q_dim=64, kv_dim=self.graph_dim, size=max_input_dim)
+        self.ca1 = CrossAttention(channels=128, q_dim=128, kv_dim=self.graph_dim, size=max_input_dim // 2)
+        self.ca2 = CrossAttention(channels=128, q_dim=256, kv_dim=self.graph_dim, size=max_input_dim // 4)
+        self.ca3 = CrossAttention(channels=128, q_dim=256, kv_dim=self.graph_dim, size=max_input_dim // 8)
+        self.ca4 = CrossAttention(channels=128, q_dim=128, kv_dim=self.graph_dim, size=max_input_dim // 4)
+        self.ca5 = CrossAttention(channels=128, q_dim=64, kv_dim=self.graph_dim, size=max_input_dim // 2)
+        self.ca6 = CrossAttention(channels=128, q_dim=64, kv_dim=self.graph_dim, size=max_input_dim)
 
         # self.ca1_cond = CrossAttention(channels=256, q_dim=128, size=max_input_dim // 2)
         # self.ca2_cond = CrossAttention(channels=256, q_dim=256, size=max_input_dim // 4)
@@ -177,11 +179,13 @@ class ConditionalUnetStackedGraphDenoiser(nn.Module):
 
         batch_size = x.size(0)
         g = self.graph_data
-        graph_encodings = [
-            genc(g).transpose(0, 1).contiguous().unsqueeze(0).repeat(batch_size, 1, 1) + self.g_level_emb.weight[
-                i].view(1, -1, 1) for
-            i, genc in enumerate(self.graph_encoders)]
-        g_concat = torch.cat(graph_encodings, dim=2)  # concat all receptive field features
+        g1 = self.genc1(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1) + self.g_level_emb.weight[
+            0].view(1, -1, 1)
+        g2 = self.genc2(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1) + self.g_level_emb.weight[
+            1].view(1, -1, 1)
+        g3 = self.genc3(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1) + self.g_level_emb.weight[
+            2].view(1, -1, 1)
+        g_concat = torch.cat([g1, g2, g3], dim=2)  # concat all receptive field features
 
         x1 = self.inc(x)
 
@@ -224,11 +228,13 @@ class ConditionalUnetStackedGraphDenoiser(nn.Module):
 
         batch_size = x.size(0)
         g = self.graph_data
-        graph_encodings = [
-            genc(g).transpose(0, 1).contiguous().unsqueeze(0).repeat(batch_size, 1, 1) + self.g_level_emb.weight[
-                i].view(1, -1, 1) for
-            i, genc in enumerate(self.graph_encoders)]
-        g_concat = torch.cat(graph_encodings, dim=2)  # concat all receptive field features
+        g1 = self.genc1(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1) + self.g_level_emb.weight[
+            0].view(1, -1, 1)
+        g2 = self.genc2(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1) + self.g_level_emb.weight[
+            1].view(1, -1, 1)
+        g3 = self.genc3(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1) + self.g_level_emb.weight[
+            2].view(1, -1, 1)
+        g_concat = torch.cat([g1, g2, g3], dim=2)  # concat all receptive field features
 
         x1 = self.inc(x)
         y1 = self.inc_cond(y)

@@ -344,7 +344,7 @@ class ConditionalUnetGraphDenoiser(nn.Module):
             y = self.up2_cond(y + x + g5_cond, y2, t)
             y = self.sa5_cond(y)
 
-            g6 = self.genc6(g).view(1, -1, 1).repeat(batch_size, 1, x.size(2))
+            g6 = self.genc6(g).view(1, -1, 1).repeat(batch_size, 1, x_next.size(2))
             g6_cond = self.genc6_cond(g).view(1, -1, 1).repeat(batch_size, 1, y.size(2))
             x = self.up3(x_next + y + g6, x1, t)
             x = self.sa6(x)

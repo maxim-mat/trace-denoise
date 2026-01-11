@@ -110,6 +110,7 @@ class HeteroGraphEncoder(nn.Module):
         self.convs = nn.ModuleList()
         for layer_idx in range(num_layers):
             in_dim = embedding_dim if layer_idx == 0 else hidden_dim
+            hidden_dim = output_dim if layer_idx == num_layers - 1 else hidden_dim
 
             convs_dict = nn.ModuleDict()
             for edge_type in edge_types:

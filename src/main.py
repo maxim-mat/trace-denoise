@@ -315,7 +315,7 @@ def main():
                                                           hidden_dim=128, pooling=cfg.gnn_pooling,
                                                           device=cfg.device).to(cfg.device).float()
         else:
-            denoiser = ConditionalUnetStackedGraphDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
+            denoiser = ConditionalUnetGraphDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
                                                     max_input_dim=salads_dataset.sequence_length,
                                                     num_nodes=pm_nx_data.num_nodes,
                                                     graph_data=pm_nx_data,

@@ -8,7 +8,8 @@ class CrossAttention(nn.Module):
         self.kv_dim = kv_dim if kv_dim is not None else channels
         self.channels = channels
         self.size = size
-        self.ln = nn.LayerNorm([self.q_dim])
+        self.ln_q = nn.LayerNorm([self.q_dim])
+        self.ln_kv = nn.LayerNorm([self.kv_dim])
         self.q_proj = nn.Linear(self.q_dim, self.channels)
         self.k_proj = nn.Linear(self.kv_dim, self.channels)
         self.v_proj = nn.Linear(self.kv_dim, self.channels)
@@ -26,9 +27,9 @@ class CrossAttention(nn.Module):
         key = key.swapaxes(1, 2)
         value = value.swapaxes(1, 2)
 
-        query_ln = self.ln(query)
-        key_ln = self.ln(key)
-        value_ln = self.ln(value)
+        query_ln = self.ln_q(query)
+        key_ln = self.ln_kv(key)
+        value_ln = self.ln_kv(value)
 
         queryln_proj = self.q_proj(query_ln)
         key_proj = self.k_proj(key_ln)

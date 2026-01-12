@@ -1,11 +1,13 @@
 import torch.nn as nn
+import torch
 
 
 class CrossAttention(nn.Module):
-    def __init__(self, channels, size, n_heads=2, q_dim=None, kv_dim=None):
+    def __init__(self, channels, size, n_heads=2, q_dim=None, kv_dim=None, init_gate=0.0, emb_dim=256):
         super(CrossAttention, self).__init__()
         self.q_dim = q_dim if q_dim is not None else channels
         self.kv_dim = kv_dim if kv_dim is not None else channels
+        self.gate = nn.Parameter(torch.tensor(float(init_gate)))
         self.channels = channels
         self.size = size
         self.ln_q = nn.LayerNorm([self.q_dim])
@@ -21,8 +23,15 @@ class CrossAttention(nn.Module):
             nn.GELU(),
             nn.Linear(self.q_dim, self.q_dim),
         )
+        self.emb_layer = nn.Sequential(
+            nn.SiLU(),
+            nn.Linear(
+                emb_dim,
+                self.q_dim
+            ),
+        )
 
-    def forward(self, query, key, value):
+    def forward(self, query, key, value, t):
         query = query.swapaxes(1, 2)
         key = key.swapaxes(1, 2)
         value = value.swapaxes(1, 2)
@@ -36,7 +45,9 @@ class CrossAttention(nn.Module):
         value_proj = self.v_proj(value_ln)
 
         attention_value, _ = self.mha(queryln_proj, key_proj, value_proj)
-        attention_value = self.out_proj(attention_value) + query  # Residual connection
+        attention_value = self.out_proj(attention_value) * nn.Softplus()(self.gate) + query  # Residual connection
         attention_value = self.ff_cross(attention_value) + attention_value  # Residual after feed-forward
 
-        return attention_value.swapaxes(2, 1).view(-1, self.q_dim, self.size)
+        emb = self.emb_layer(t).unsqueeze(2).repeat(1, 1, query.shape[1])
+
+        return attention_value.swapaxes(2, 1).view(-1, self.q_dim, self.size) + emb

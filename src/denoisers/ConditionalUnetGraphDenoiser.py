@@ -256,8 +256,9 @@ class ConditionalUnetGraphDenoiser(nn.Module):
             y2 = self.sa1_cond(y2)
             g1 = self.genc1(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
             g1_cond = self.genc1_cond(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
-            x2 = self.ca1(x2, g1, g1, t)
-            y2 = self.ca1_cond(y2, g1_cond, g1_cond, t)
+            xy_sum = x2 + y2
+            x2 = self.ca1(xy_sum, g1, g1, t)
+            y2 = self.ca1_cond(xy_sum, g1_cond, g1_cond, t)
 
             x3 = self.down2(x2 + y2, t)
             x3 = self.sa2(x3)
@@ -265,8 +266,9 @@ class ConditionalUnetGraphDenoiser(nn.Module):
             y3 = self.sa2_cond(y3)
             g2 = self.genc2(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
             g2_cond = self.genc2_cond(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
-            x3 = self.ca2(x3, g2, g2, t)
-            y3 = self.ca2_cond(y3, g2_cond, g2_cond, t)
+            xy_sum = x3 + y3
+            x3 = self.ca2(xy_sum, g2, g2, t)
+            y3 = self.ca2_cond(xy_sum, g2_cond, g2_cond, t)
 
             x4 = self.down3(x3 + y3, t)
             x4 = self.sa3(x4)
@@ -274,8 +276,9 @@ class ConditionalUnetGraphDenoiser(nn.Module):
             y4 = self.sa3_cond(y4)
             g3 = self.genc3(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
             g3_cond = self.genc3_cond(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
-            x4 = self.ca3(x4, g3, g3, t)
-            y4 = self.ca3_cond(y4, g3_cond, g3_cond, t)
+            xy_sum = x4 + y4
+            x4 = self.ca3(xy_sum, g3, g3, t)
+            y4 = self.ca3_cond(xy_sum, g3_cond, g3_cond, t)
         else:
             # g1 = self.genc1(g).view(1, -1, 1).repeat(batch_size, 1, x1.size(2))
             x2 = self.down1(x1 + y1, t)
@@ -311,8 +314,9 @@ class ConditionalUnetGraphDenoiser(nn.Module):
             y = self.sa4_cond(y)
             g4 = self.genc4(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
             g4_cond = self.genc4_cond(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
-            x = self.ca4(x, g4, g4, t)
-            y = self.ca4_cond(y, g4_cond, g4_cond, t)
+            xy_sum = x + y
+            x = self.ca4(xy_sum, g4, g4, t)
+            y = self.ca4_cond(xy_sum, g4_cond, g4_cond, t)
 
             x_next = self.up2(x + y, x2, t)
             y = self.up2_cond(y + x, y2, t)
@@ -320,8 +324,9 @@ class ConditionalUnetGraphDenoiser(nn.Module):
             y = self.sa5_cond(y)
             g5 = self.genc5(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
             g5_cond = self.genc5_cond(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
-            x = self.ca5(x_next, g5, g5, t)
-            y = self.ca5_cond(y, g5_cond, g5_cond, t)
+            xy_sum = x_next + y
+            x = self.ca5(xy_sum, g5, g5, t)
+            y = self.ca5_cond(xy_sum, g5_cond, g5_cond, t)
 
             x_next = self.up3(x + y, x1, t)
             y = self.up3_cond(y + x, y1, t)
@@ -329,8 +334,9 @@ class ConditionalUnetGraphDenoiser(nn.Module):
             y = self.sa6_cond(y)
             g6 = self.genc6(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
             g6_cond = self.genc6_cond(g).view(-1, g.num_nodes).unsqueeze(0).repeat(batch_size, 1, 1)
-            x = self.ca6(x_next, g6, g6, t)
-            y = self.ca6_cond(y, g6_cond, g6_cond, t)
+            xy_sum = x_next + y
+            x = self.ca6(xy_sum, g6, g6, t)
+            y = self.ca6_cond(xy_sum, g6_cond, g6_cond, t)
         else:
             g4 = self.genc4(g).view(1, -1, 1).repeat(batch_size, 1, x4.size(2))
             g4_cond = self.genc4_cond(g).view(1, -1, 1).repeat(batch_size, 1, y4.size(2))

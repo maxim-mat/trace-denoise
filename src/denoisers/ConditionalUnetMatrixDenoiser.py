@@ -56,7 +56,7 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
         forward(x, t, gt_x, gt_m, y=None, drop_matrix=False):
             Main forward pass method. Computes the denoised output and loss.
     """
-    def __init__(self, in_ch, out_ch, max_input_dim, transition_dim, transition_matrix=None, time_dim=128, gamma=None,
+    def __init__(self, in_ch, out_ch, max_input_dim, transition_dim, ignore_index, transition_matrix=None, time_dim=128, gamma=None,
                  matrix_out_channels=1, device="cuda"):
         super().__init__()
         self.device = device
@@ -67,7 +67,7 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
         self.alpha = torch.logit(torch.tensor(gamma)).to(device) if gamma is not None else nn.Parameter(torch.rand(1)).to(device)
         self.transition_matrix = transition_matrix if transition_matrix is not None \
             else nn.Parameter(torch.randn(1, in_ch + 1, self.transition_dim, self.transition_dim).to(device))
-        self.sequence_loss = nn.CrossEntropyLoss()
+        self.sequence_loss = nn.CrossEntropyLoss(ignore_index=ignore_index)
         self.matrix_loss = nn.BCEWithLogitsLoss()
 
         self.inc = DoubleConv(in_ch, 64)

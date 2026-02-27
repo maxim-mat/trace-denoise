@@ -303,6 +303,7 @@ def main():
         denoiser = ConditionalUnetMatrixDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
                                                  max_input_dim=salads_dataset.sequence_length,
                                                  transition_dim=rg_transition_matrix.shape[-1],
+                                                 ignore_index=cfg.num_classes - 1,
                                                  gamma=cfg.gamma,
                                                  matrix_out_channels=rg_transition_matrix.shape[0],
                                                  device=cfg.device).to(cfg.device).float()
@@ -319,10 +320,12 @@ def main():
                                                     num_nodes=pm_nx_data.num_nodes,
                                                     graph_data=pm_nx_data,
                                                     embedding_dim=128, hidden_dim=128,
+                                                    ignore_index=cfg.num_classes - 1,
                                                     pooling=cfg.gnn_pooling, device=cfg.device).to(cfg.device).float()
     else:
         denoiser = ConditionalUnetDenoiser(in_ch=cfg.num_classes, out_ch=cfg.num_classes,
                                            max_input_dim=salads_dataset.sequence_length,
+                                           ignore_index=cfg.num_classes - 1,
                                            device=cfg.device).to(cfg.device).float()
     if cfg.parallelize:
         denoiser = nn.DataParallel(denoiser, device_ids=[0, 1])

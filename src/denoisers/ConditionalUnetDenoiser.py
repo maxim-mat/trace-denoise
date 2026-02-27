@@ -7,12 +7,12 @@ from modules.SelfAttention import SelfAttention
 
 
 class ConditionalUnetDenoiser(nn.Module):
-    def __init__(self, in_ch, out_ch, max_input_dim, time_dim=128, device="cuda"):
+    def __init__(self, in_ch, out_ch, max_input_dim, ignore_index, time_dim=128, device="cuda"):
         super().__init__()
         self.device = device
         self.time_dim = time_dim
         self.max_input_dim = max_input_dim
-        self.loss = nn.CrossEntropyLoss()
+        self.loss = nn.CrossEntropyLoss(ignore_index=ignore_index)
         self.alpha = torch.tensor(0.0)  # for compatibility with other denoisers
 
         self.inc = DoubleConv(in_ch, 64)

@@ -13,7 +13,7 @@ from modules.CrossAttention import CrossAttention
 
 class ConditionalUnetGraphDenoiser(nn.Module):
     def __init__(self, in_ch, out_ch, max_input_dim, num_nodes, graph_data,
-                 embedding_dim, hidden_dim, pooling=None, time_dim=128, device="cuda"):
+                 embedding_dim, hidden_dim, ignore_index, pooling=None, time_dim=128, device="cuda"):
         super().__init__()
         self.device = device
         self.time_dim = time_dim
@@ -21,7 +21,7 @@ class ConditionalUnetGraphDenoiser(nn.Module):
         self.graph_data = graph_data
         self.gnn_pooling = pooling
         self.alpha = 0
-        self.loss = nn.CrossEntropyLoss()
+        self.loss = nn.CrossEntropyLoss(ignore_index=ignore_index)
 
         # generated output u-net layers
         self.inc = DoubleConv(in_ch, 64)

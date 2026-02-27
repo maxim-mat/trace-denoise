@@ -3,12 +3,12 @@ import torch.nn as nn
 import torch_geometric
 from torch_geometric.nn import to_hetero
 
-from src.modules.DoubleConv import DoubleConv
-from src.modules.Up import Up
-from src.modules.Down import Down
-from src.modules.SelfAttention import SelfAttention
-from src.modules.CrossAttention import CrossAttention
-from src.modules.GraphNodeEncoder import GraphNodeEncoder
+from modules.DoubleConv import DoubleConv
+from modules.Up import Up
+from modules.Down import Down
+from modules.SelfAttention import SelfAttention
+from modules.CrossAttention import CrossAttention
+from modules.GraphNodeEncoder import GraphNodeEncoder
 
 
 class ConditionalUnetAttentionGraphDenoiser(nn.Module):

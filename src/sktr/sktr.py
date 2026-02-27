@@ -26,17 +26,17 @@ import torch
 import sympy
 from random import sample
 import pickle as pkl
-from src.denoisers.ConditionalUnetDenoiser import ConditionalUnetDenoiser
-from src.dataset.dataset import SaladsDataset
+from denoisers.ConditionalUnetDenoiser import ConditionalUnetDenoiser
+from dataset.dataset import SaladsDataset
 import plotly.express as px
 import plotly.graph_objects as go
 from sklearn.model_selection import train_test_split
-from src.ddpm.ddpm_multinomial import Diffusion
+from ddpm.ddpm_multinomial import Diffusion
 import torch
 import random
-from src.utils.Config import Config
+from utils.Config import Config
 
-from src.dataset.dataset import SaladsDataset
+from dataset.dataset import SaladsDataset
 
 
 class Place:

@@ -1,8 +1,8 @@
 import torch.nn as nn
 import torch_geometric
 
-from src.modules.DoubleConv import DoubleConv
-from src.modules.GraphEncoder import GraphEncoder
+from modules.DoubleConv import DoubleConv
+from modules.GraphEncoder import GraphEncoder
 
 
 class GraphDown(nn.Module):

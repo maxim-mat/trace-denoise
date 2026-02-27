@@ -4,14 +4,17 @@ from typing import Callable
 import numpy as np
 import pandas as pd
 import pm4py
+from pm4py.algo.conformance.alignments.petri_net import algorithm as alignments
+from pm4py.algo.conformance.alignments.petri_net.variants import state_equation_a_star
+from pm4py.objects.conversion.log import converter
 import torch
 import torch.nn.functional as F
 from itertools import groupby
-from src.dataset.dataset import SaladsDataset
-from src.sktr.sktr import convert_dataset_to_df, from_discovered_model_to_PetriNet, recover_single_trace, \
+from dataset.dataset import SaladsDataset
+from sktr.sktr import convert_dataset_to_df, from_discovered_model_to_PetriNet, recover_single_trace, \
     sfmx_mat_to_sk_trace
-import src.sktr.sktr
-from src.utils import Config
+import sktr.sktr
+from utils import Config
 
 
 def prepare_df_cols_for_discovery(df):
@@ -36,6 +39,8 @@ def resolve_process_discovery_method(method_name: str) -> Callable:
     match method_name:
         case "inductive":
             return pm4py.discover_petri_net_inductive
+        case "dfg":
+            return pm4py.discover_dfg
         case _:
             raise AttributeError(f"Unsupported discovery method: {method_name}")
 
@@ -59,7 +64,7 @@ def subsample_time_series(trace_data: dict, num_indexes: int, axis: int = 0):
     return {'target': dk_sample, 'stochastic': sk_sample}, sample_indexes
 
 
-def train_sktr(dataset: SaladsDataset, cfg: Config) -> src.sktr.sktr.PetriNet:
+def train_sktr(dataset: SaladsDataset, cfg: Config) -> sktr.sktr.PetriNet:
     """
     run process discovery on the train dataset
     :param dataset: train dataset
@@ -93,7 +98,10 @@ def discover_dk_process(dataset: SaladsDataset, cfg: Config, preprocess=dataset_
     deterministic, stochastic = preprocess(dataset)
     df_train = convert_dataset_to_train_process_df(deterministic, stochastic, cfg)
     process_discovery_method = resolve_process_discovery_method(cfg.process_discovery_method)
-    return process_discovery_method(df_train)
+    activity_counts = None
+    if cfg.process_discovery_method == 'dfg':
+        activity_counts = pm4py.get_event_attribute_values(df_train, "concept:name")
+    return *process_discovery_method(df_train), activity_counts
 
 
 def process_sk_trace(sk_trace: pd.DataFrame, activity_names, round_precision, model, non_sync_penalty):
@@ -106,7 +114,7 @@ def process_sk_trace(sk_trace: pd.DataFrame, activity_names, round_precision, mo
     return recovered_trace
 
 
-def evaluate_sktr_on_dataset(dataset: SaladsDataset, model: src.sktr.sktr.PetriNet, cfg: Config):
+def evaluate_sktr_on_dataset(dataset: SaladsDataset, model: sktr.sktr.PetriNet, cfg: Config):
     stochastic_traces_matrices = convert_dataset_to_stochastic_traces(dataset, cfg)
     args_list = [
         (sk_trace, cfg.activity_names, cfg.round_precision, model, 1)
@@ -138,6 +146,43 @@ def pad_to_multiple_of_n(tensor, n=32):
     padded_tensor = F.pad(tensor, (pad_left, pad_right, pad_top, pad_bottom))
 
     return padded_tensor
+
+
+def list_to_traces(traces_list, activity_names):
+    df_deterministic = pd.DataFrame(
+        {
+            'concept:name': [activity_names[i] for trace in traces_list for i in trace],
+            'case:concept:name': [str(i) for i, trace in enumerate(traces_list) for _ in range(len(trace))]
+        }
+    )
+
+    return prepare_df_cols_for_discovery(df_deterministic)
+
+
+def traces_tensor_to_list(traces_tensor, limit=None, remove_duplicates=True):
+    if limit is None:
+        if remove_duplicates:
+            return [remove_duplicates_trace(xi).tolist() for xi in traces_tensor]
+        else:
+            return [xi.tolist() for xi in traces_tensor]
+    else:
+        if remove_duplicates:
+            return [remove_duplicates_trace(xi).tolist()[:limit] for xi in traces_tensor]
+        else:
+            return [xi.tolist()[:limit] for xi in traces_tensor]
+
+
+def conformance_measure(traces_tensor, process_model, initial_marking, final_marking, activity_names,
+                        limit=None, remove_duplicates=True, approximate=False):
+    traces = traces_tensor_to_list(traces_tensor, limit, remove_duplicates)
+    df_traces = list_to_traces(traces, activity_names)
+    log = converter.apply(df_traces)
+    if approximate:
+        alignment_measures = alignments.apply_log(log, process_model, initial_marking, final_marking,
+                                                  variant=state_equation_a_star)
+    else:
+        alignment_measures = alignments.apply_log(log, process_model, initial_marking, final_marking)
+    return [d['fitness'] for d in alignment_measures]
 
 
 def simulate_process_model(process_model: pm4py.PetriNet, init_marking: pm4py.Marking,

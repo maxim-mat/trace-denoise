@@ -128,4 +128,14 @@ data/*/
 !data/*.*
 .idea/
 runs/
+pretty_results/
 /data/rgb.zip
+configs/
+result_aggregations/
+final_runs/
+final_runs_extended/
+advanced_noise/
+simple_noise_datasets_source/
+simple_noise_datasets_target/
+sktr_update/
+config2.json

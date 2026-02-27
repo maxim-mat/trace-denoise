@@ -1,9 +1,9 @@
 import torch
 import torch.nn as nn
-from src.modules.DoubleConv import DoubleConv
-from src.modules.Up import Up
-from src.modules.Down import Down
-from src.modules.SelfAttention import SelfAttention
+from modules.DoubleConv import DoubleConv
+from modules.Up import Up
+from modules.Down import Down
+from modules.SelfAttention import SelfAttention
 
 
 class ConditionalUnetDenoiser(nn.Module):
@@ -12,6 +12,9 @@ class ConditionalUnetDenoiser(nn.Module):
         self.device = device
         self.time_dim = time_dim
         self.max_input_dim = max_input_dim
+        self.loss = nn.CrossEntropyLoss()
+        self.alpha = torch.tensor(0.0)  # for compatibility with other denoisers
+
         self.inc = DoubleConv(in_ch, 64)
         self.down1 = Down(64, 128, emb_dim=time_dim)
         self.sa1 = SelfAttention(128, max_input_dim // 2)
@@ -132,8 +135,12 @@ class ConditionalUnetDenoiser(nn.Module):
 
         return x
 
-    def forward(self, x, t, y=None):
+    def forward(self, x, t, gt_x, gt_m=None, y=None, drop_matrix=True):
         if y is not None:
-            return self._forward_cond(x, y, t)
+            x_hat = self._forward_cond(x, y, t)
         else:
-            return self._forward_uncond(x, t)
+            x_hat = self._forward_uncond(x, t)
+        loss = self.loss(x_hat, gt_x) if gt_x is not None else None
+
+        # to match return signature of denoiser with matrix
+        return x_hat, None, loss, loss.item() if loss is not None else None, 0

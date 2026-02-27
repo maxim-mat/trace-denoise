@@ -39,6 +39,8 @@ def resolve_process_discovery_method(method_name: str) -> Callable:
     match method_name:
         case "inductive":
             return pm4py.discover_petri_net_inductive
+        case "dfg":
+            return pm4py.discover_dfg
         case _:
             raise AttributeError(f"Unsupported discovery method: {method_name}")
 
@@ -96,7 +98,10 @@ def discover_dk_process(dataset: SaladsDataset, cfg: Config, preprocess=dataset_
     deterministic, stochastic = preprocess(dataset)
     df_train = convert_dataset_to_train_process_df(deterministic, stochastic, cfg)
     process_discovery_method = resolve_process_discovery_method(cfg.process_discovery_method)
-    return process_discovery_method(df_train)
+    activity_counts = None
+    if cfg.process_discovery_method == 'dfg':
+        activity_counts = pm4py.get_event_attribute_values(df_train, "concept:name")
+    return *process_discovery_method(df_train), activity_counts
 
 
 def process_sk_trace(sk_trace: pd.DataFrame, activity_names, round_precision, model, non_sync_penalty):

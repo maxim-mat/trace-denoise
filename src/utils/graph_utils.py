@@ -11,6 +11,7 @@ import torch_geometric
 import pm4py
 from utils.Config import Config
 from pm4py.objects.petri_net.obj import PetriNet
+from pm4py.algo.filtering.dfg import dfg_filtering
 
 def get_onehot_features(graph: nx.Graph) -> Iterable:
     node_names = np.array([n[0] for n in graph.nodes(data=True)]).reshape(-1, 1)
@@ -41,8 +42,11 @@ def add_features_to_graph(graph: nx.Graph, feature_collections: Iterable[Iterabl
 
 
 def prepare_process_model_for_gnn(process_model: pm4py.PetriNet, init_marking: pm4py.Marking,
-                                  final_marking: pm4py.Marking, cfg: Config) -> torch_geometric.data.Data:
-    model_nx = pm4py.convert_petri_net_to_networkx(process_model, init_marking, final_marking)
+                                  final_marking: pm4py.Marking, cfg: Config, activity_counts=None) -> torch_geometric.data.Data:
+    if cfg.process_discovery_method == 'inductive':
+        model_nx = pm4py.convert_petri_net_to_networkx(process_model, init_marking, final_marking)
+    else:
+        model_nx = dfg_filtering.generate_nx_graph_from_dfg(process_model, init_marking, final_marking, activity_counts)[0]
     feature_collections = get_feature_collections(model_nx, cfg)
     add_features_to_graph(model_nx, feature_collections)
     data = from_networkx(model_nx)

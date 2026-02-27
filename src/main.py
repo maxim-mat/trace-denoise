@@ -261,8 +261,8 @@ def main():
     # random initialization instead of None for compatibility, isn't used in any way if enable_matrix is false
     rg_transition_matrix = torch.randn((cfg.num_classes, 2, 2)).to(cfg.device)
     logger.info("discovering process")
-    dk_process_model, dk_init_marking, dk_final_marking = discover_dk_process(train_dataset, cfg,
-                                                                              preprocess=remove_duplicates_dataset)
+    dk_process_model, dk_init_marking, dk_final_marking, activity_counts = discover_dk_process(train_dataset, cfg,
+                                                                                               preprocess=remove_duplicates_dataset)
     if cfg.enable_matrix:
         logger.info("creating flow matrix")
         if cfg.matrix_type == "pm":
@@ -282,7 +282,7 @@ def main():
                                                              dk_init_marking, dk_final_marking, cfg).to(cfg.device)
         else:
             pm_nx_data = prepare_process_model_for_gnn(dk_process_model,
-                                                       dk_init_marking, dk_final_marking, cfg).to(cfg.device)
+                                                       dk_init_marking, dk_final_marking, cfg, activity_counts).to(cfg.device)
 
     train_loader = DataLoader(
         train_dataset,

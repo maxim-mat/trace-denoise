@@ -140,7 +140,7 @@ class ConditionalUnetDenoiser(nn.Module):
             x_hat = self._forward_cond(x, y, t)
         else:
             x_hat = self._forward_uncond(x, t)
-        loss = self.loss(x_hat, gt_x) if gt_x is not None else None
+        loss = self.loss(x_hat, torch.argmax(gt_x, dim=1)) if gt_x is not None else None
 
         # to match return signature of denoiser with matrix
         return x_hat, None, loss, loss.item() if loss is not None else None, 0

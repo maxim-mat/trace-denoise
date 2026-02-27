@@ -406,7 +406,7 @@ class ConditionalUnetMatrixDenoiser(nn.Module):
             else:
                 x_hat = self._forward_uncond_no_mat(x, t)
         alpha_clamped = torch.sigmoid(self.alpha)
-        sequence_loss = self.sequence_loss(x_hat, gt_x) if gt_x is not None else None
+        sequence_loss = self.sequence_loss(x_hat, torch.argmax(gt_x, dim=1)) if gt_x is not None else None
         if not drop_matrix:
             final_loss = alpha_clamped * sequence_loss + (1 - alpha_clamped) * matrix_loss if sequence_loss is not None else None
         else:

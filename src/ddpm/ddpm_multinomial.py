@@ -95,12 +95,12 @@ class Diffusion:
                 else:
                     noise = torch.zeros_like(x)
                 if denoiser_output == 'noise':
-                    x = 1 / torch.sqrt(alpha) * (x - ((1 - alpha) / (torch.sqrt(1 - alpha_hat))) * predicted)
-                    + ((1 - alpha_hat_prev) / (1 - alpha_hat)) * torch.sqrt(beta) * noise
+                    x = (1 / torch.sqrt(alpha)) * (x - ((1 - alpha) / (torch.sqrt(1 - alpha_hat))) * predicted)
+                    + torch.sqrt(((1 - alpha_hat_prev) / (1 - alpha_hat)) * beta) * noise
                 elif denoiser_output == 'original':
-                    x = (torch.sqrt(alpha_hat_prev) / (1 - alpha_hat)) * predicted
+                    x = ((torch.sqrt(alpha_hat_prev) * beta) / (1 - alpha_hat)) * predicted
                     + ((torch.sqrt(alpha) * (1 - alpha_hat_prev)) / (1 - alpha_hat)) * x
-                    + ((1 - alpha_hat_prev) / (1 - alpha_hat)) * torch.sqrt(beta) * noise
+                    + torch.sqrt(((1 - alpha_hat_prev) / (1 - alpha_hat)) * beta) * noise
                     m = matrix_hat
         model.train()
         loss = loss.item() if loss is not None else None

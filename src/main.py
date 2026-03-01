@@ -165,6 +165,10 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
         train_matrix_loss.append(epoch_second_loss / max(l_matrix, 1))
         train_alpha.append(denoiser.alpha)
 
+        save_ckpt(denoiser, optimizer, epoch, cfg, train_losses[-1], test_losses[-1],
+                  (epoch_loss / l) < best_loss)
+        best_loss = (epoch_loss / l) if (epoch_loss / l) < best_loss else best_loss
+
         if epoch % cfg.test_every == 0:
             logger.info("testing epoch")
             if cfg.eval_train:
@@ -241,9 +245,6 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
             test_alpha.append(test_alpha_clamp)
             test_alignment.append(test_epoch_alignment)
             logger.info("saving model")
-            save_ckpt(denoiser, optimizer, epoch, cfg, train_losses[-1], test_losses[-1],
-                      test_epoch_loss < best_loss)
-            best_loss = test_epoch_loss if test_epoch_loss < best_loss else best_loss
 
     return (train_losses, test_losses, test_dist, test_acc, test_precision, test_recall, test_f1, test_auc,
             train_acc, train_recall, train_precision, train_f1, train_auc, train_dist, train_seq_loss,

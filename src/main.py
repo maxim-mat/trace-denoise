@@ -32,13 +32,12 @@ from utils.graph_utils import get_process_model_reachability_graph_transition_ma
 warnings.filterwarnings("ignore")
 
 
-def save_ckpt(model, opt, epoch, cfg, train_loss, test_loss, best=False):
+def save_ckpt(model, opt, epoch, cfg, train_loss, best=False):
     ckpt = {
         'epoch': epoch,
         'model_state': model.state_dict(),
         'opt_state': opt.state_dict(),
         'train_loss': train_loss,
-        'test_loss': test_loss
     }
     torch.save(ckpt, os.path.join(cfg.summary_path, 'last.ckpt'))
     if best:
@@ -165,8 +164,7 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
         train_matrix_loss.append(epoch_second_loss / max(l_matrix, 1))
         train_alpha.append(denoiser.alpha)
 
-        save_ckpt(denoiser, optimizer, epoch, cfg, train_losses[-1], test_losses[-1],
-                  (epoch_loss / l) < best_loss)
+        save_ckpt(denoiser, optimizer, epoch, cfg, train_losses[-1], (epoch_loss / l) < best_loss)
         best_loss = (epoch_loss / l) if (epoch_loss / l) < best_loss else best_loss
 
         if epoch % cfg.test_every == 0:

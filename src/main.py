@@ -44,6 +44,37 @@ def save_ckpt(model, opt, epoch, cfg, train_loss, best=False):
         torch.save(ckpt, os.path.join(cfg.summary_path, 'best.ckpt'))
 
 
+def evaluate_dataset(denoiser, diffuser, rg_transition_matrix, loader, cfg):
+    pad_token = cfg.num_classes - 1
+    denoised = []
+    gt = []
+    for x, y in loader:
+        x = x.permute(0, 2, 1).to(cfg.device).float()
+        y = y.permute(0, 2, 1).to(cfg.device).float()
+        x_hat, matrix_hat, loss, seq_loss, mat_loss = \
+            diffuser.sample_with_matrix(denoiser, y.shape[0], cfg.num_classes, denoiser.max_input_dim,
+                                        rg_transition_matrix.shape[-1], rg_transition_matrix, x, y,
+                                        cfg.predict_on)
+        denoised.append(x_hat)
+        gt.append(x)
+    denoised = torch.cat(denoised, dim=0)
+    gt = torch.cat(gt, dim=0)
+
+    x_list = []
+    y_list = []
+    for x_0, y in zip(gt, denoised):
+        x_tokens = torch.argmax(x_0, dim=0)
+        y_tokens = torch.argmax(torch.softmax(y, dim=0).transpose(0, 1), dim=1)
+        x_list.append(np.array(x_tokens[x_tokens != pad_token].cpu()))
+        y_list.append(np.array(y_tokens[x_tokens != pad_token].cpu()))
+
+    acc = np.mean([accuracy_score(x, y) for x, y in zip(x_list, y_list)])
+    rec = np.mean([recall_score(x, y, average='macro', zero_division=0) for x, y in zip(x_list, y_list)])
+    pre = np.mean([precision_score(x, y, average='macro', zero_division=0) for x, y in zip(x_list, y_list)])
+
+    return acc, pre, rec
+
+
 def evaluate(diffuser, denoiser, test_loader, transition_matrix,
              process_model, init_marking, final_marking, cfg, summary, epoch, logger):
     denoiser.eval()
@@ -164,8 +195,9 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
         train_matrix_loss.append(epoch_second_loss / max(l_matrix, 1))
         train_alpha.append(denoiser.alpha)
 
-        save_ckpt(denoiser, optimizer, epoch, cfg, train_losses[-1], (epoch_loss / l) < best_loss)
-        best_loss = (epoch_loss / l) if (epoch_loss / l) < best_loss else best_loss
+        if epoch % 50 or epoch == cfg.num_epochs - 1:
+            save_ckpt(denoiser, optimizer, epoch, cfg, train_losses[-1], (epoch_loss / l) < best_loss)
+            best_loss = (epoch_loss / l) if (epoch_loss / l) < best_loss else best_loss
 
         if epoch % cfg.test_every == 0:
             logger.info("testing epoch")
@@ -340,55 +372,46 @@ def main():
         train(diffuser, denoiser, optimizer, train_loader, test_loader, rg_transition_matrix,
               dk_process_model, dk_init_marking, dk_final_marking, cfg, summary, logger)
 
+    denoiser.load_state_dict(torch.load(os.path.join(cfg.summary_path, 'best.ckpt'), map_location=cfg.device)['model_state'])
+    accuracy, precision, recall = evaluate_dataset(denoiser, diffuser, rg_transition_matrix, test_loader, cfg)
+
     end_time = time.perf_counter()
     elapsed = end_time - start_time
 
     px.line(train_losses).write_html(os.path.join(cfg.summary_path, "train_loss.html"))
-    px.line(test_losses).write_html(os.path.join(cfg.summary_path, "test_loss.html"))
-    px.line(test_dist).write_html(os.path.join(cfg.summary_path, "test_dist.html"))
-    px.line(test_acc).write_html(os.path.join(cfg.summary_path, "test_acc.html"))
-    px.line(test_precision).write_html(os.path.join(cfg.summary_path, "test_precision.html"))
-    px.line(tests_recall).write_html(os.path.join(cfg.summary_path, "test_recall.html"))
-    px.line(test_f1).write_html(os.path.join(cfg.summary_path, "test_f1.html"))
-    px.line(test_auc).write_html(os.path.join(cfg.summary_path, "test_auc.html"))
-    px.line(train_acc).write_html(os.path.join(cfg.summary_path, "train_acc.html"))
-    px.line(train_recall).write_html(os.path.join(cfg.summary_path, "train_recall.html"))
-    px.line(train_precision).write_html(os.path.join(cfg.summary_path, "train_precision.html"))
-    px.line(train_f1).write_html(os.path.join(cfg.summary_path, "train_f1.html"))
-    px.line(train_auc).write_html(os.path.join(cfg.summary_path, "train_auc.html"))
-    px.line(train_dist).write_html(os.path.join(cfg.summary_path, "train_dist.html"))
-    px.line(train_seq_loss).write_html(os.path.join(cfg.summary_path, "train_seq_loss.html"))
-    px.line(train_mat_loss).write_html(os.path.join(cfg.summary_path, "train_mat_loss.html"))
-    px.line(test_seq_loss).write_html(os.path.join(cfg.summary_path, "test_seq_loss.html"))
-    px.line(test_mat_loss).write_html(os.path.join(cfg.summary_path, "test_mat_loss.html"))
-    # px.line(train_alpha).write_html(os.path.join(cfg.summary_path, "train_alpha.html"))
-    # px.line(test_alpha).write_html(os.path.join(cfg.summary_path, "test_alpha.html"))
-    px.line(train_alignment).write_html(os.path.join(cfg.summary_path, "train_alignment.html"))
-    px.line(test_alignment).write_html(os.path.join(cfg.summary_path, "test_alignment.html"))
+    # px.line(test_losses).write_html(os.path.join(cfg.summary_path, "test_loss.html"))
+    # px.line(test_dist).write_html(os.path.join(cfg.summary_path, "test_dist.html"))
+    # px.line(test_acc).write_html(os.path.join(cfg.summary_path, "test_acc.html"))
+    # px.line(test_precision).write_html(os.path.join(cfg.summary_path, "test_precision.html"))
+    # px.line(tests_recall).write_html(os.path.join(cfg.summary_path, "test_recall.html"))
+    # px.line(test_f1).write_html(os.path.join(cfg.summary_path, "test_f1.html"))
+    # px.line(test_auc).write_html(os.path.join(cfg.summary_path, "test_auc.html"))
+    # px.line(train_acc).write_html(os.path.join(cfg.summary_path, "train_acc.html"))
+    # px.line(train_recall).write_html(os.path.join(cfg.summary_path, "train_recall.html"))
+    # px.line(train_precision).write_html(os.path.join(cfg.summary_path, "train_precision.html"))
+    # px.line(train_f1).write_html(os.path.join(cfg.summary_path, "train_f1.html"))
+    # px.line(train_auc).write_html(os.path.join(cfg.summary_path, "train_auc.html"))
+    # px.line(train_dist).write_html(os.path.join(cfg.summary_path, "train_dist.html"))
+    # px.line(train_seq_loss).write_html(os.path.join(cfg.summary_path, "train_seq_loss.html"))
+    # px.line(train_mat_loss).write_html(os.path.join(cfg.summary_path, "train_mat_loss.html"))
+    # px.line(test_seq_loss).write_html(os.path.join(cfg.summary_path, "test_seq_loss.html"))
+    # px.line(test_mat_loss).write_html(os.path.join(cfg.summary_path, "test_mat_loss.html"))
+    # # px.line(train_alpha).write_html(os.path.join(cfg.summary_path, "train_alpha.html"))
+    # # px.line(test_alpha).write_html(os.path.join(cfg.summary_path, "test_alpha.html"))
+    # px.line(train_alignment).write_html(os.path.join(cfg.summary_path, "train_alignment.html"))
+    # px.line(test_alignment).write_html(os.path.join(cfg.summary_path, "test_alignment.html"))
 
     final_results = {
         "elapsed_time": str(timedelta(seconds=elapsed)),
         "train":
             {
                 "loss": train_losses[-1],
-                "acc": train_acc[-1],
-                "precision": train_precision[-1],
-                "recall": train_recall[-1],
-                "f1": train_f1[-1],
-                "auc": train_auc[-1],
-                "dist": train_dist[-1],
-                "alignment": train_alignment[-1],
             },
         "test":
             {
-                "loss": test_losses[-1],
-                "acc": test_acc[-1],
-                "precision": test_precision[-1],
-                "recall": tests_recall[-1],
-                "f1": test_f1[-1],
-                "auc": test_auc[-1],
-                "dist": test_dist[-1],
-                "alignment": test_alignment[-1],
+                "accuracy": accuracy,
+                "precision": precision,
+                "recall": recall,
             }
     }
     with open(os.path.join(cfg.summary_path, "final_results.json"), "w") as f:

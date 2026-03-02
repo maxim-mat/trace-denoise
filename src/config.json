@@ -18,7 +18,7 @@
   "predict_on": "original",
   "seed": 42,
   "enable_matrix": false,
-  "enable_gnn": true,
+  "enable_gnn": false,
   "gamma": 0.5,
   "matrix_type": "pm",
   "activity_names": {

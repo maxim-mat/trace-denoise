@@ -1,4 +1,5 @@
 import json
+import threading
 import os
 import pickle as pkl
 import random
@@ -32,16 +33,12 @@ from utils.graph_utils import get_process_model_reachability_graph_transition_ma
 warnings.filterwarnings("ignore")
 
 
-def save_ckpt(model, opt, epoch, cfg, train_loss, best=False):
-    ckpt = {
-        'epoch': epoch,
-        'model_state': model.state_dict(),
-        'opt_state': opt.state_dict(),
-        'train_loss': train_loss,
-    }
-    torch.save(ckpt, os.path.join(cfg.summary_path, 'last.ckpt'))
+def save_ckpt(ckpt, summary_path, best=False):
     if best:
-        torch.save(ckpt, os.path.join(cfg.summary_path, 'best.ckpt'))
+        torch.save(ckpt, os.path.join(summary_path, 'best.ckpt'))
+    else:
+        torch.save(ckpt, os.path.join(summary_path, 'last.ckpt'))
+
 
 
 def evaluate_dataset(denoiser, diffuser, rg_transition_matrix, loader, cfg):
@@ -195,9 +192,17 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
         train_matrix_loss.append(epoch_second_loss / max(l_matrix, 1))
         train_alpha.append(denoiser.alpha)
 
-        if epoch % 50 or epoch == cfg.num_epochs - 1:
-            save_ckpt(denoiser, optimizer, epoch, cfg, train_losses[-1], (epoch_loss / l) < best_loss)
-            best_loss = (epoch_loss / l) if (epoch_loss / l) < best_loss else best_loss
+        if epoch % 50 == 0 or epoch == cfg.num_epochs - 1:
+            is_best = (epoch_loss / l) < best_loss
+            ckpt = {
+                'epoch': epoch,
+                'model_state': denoiser.state_dict(),
+                'opt_state': optimizer.state_dict(),
+                'train_loss': train_losses[-1],
+            }
+            thread = threading.Thread(target=save_ckpt, args=(ckpt, cfg.summary_path, is_best))
+            thread.start()
+            best_loss = (epoch_loss / l) if is_best else best_loss
 
         if epoch % cfg.test_every == 0:
             logger.info("testing epoch")

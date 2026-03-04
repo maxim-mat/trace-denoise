@@ -17,6 +17,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 import time
 from datetime import timedelta
+import copy
 
 from dataset.dataset import SaladsDataset
 from ddpm.ddpm_multinomial import Diffusion
@@ -158,6 +159,7 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
     l = len(train_loader)
     transition_matrix = transition_matrix.unsqueeze(0)
     best_loss = float('inf')
+    ckpt_thread = None
     denoiser.train()
     for epoch in tqdm(range(cfg.num_epochs)):
         l_matrix = 0  # how many times matrix loss was calculated because it's dropped out sometimes
@@ -196,12 +198,12 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
             is_best = (epoch_loss / l) < best_loss
             ckpt = {
                 'epoch': epoch,
-                'model_state': denoiser.state_dict(),
-                'opt_state': optimizer.state_dict(),
+                'model_state': {k: v.cpu().clone() for k, v in denoiser.state_dict().items()},
+                'opt_state': copy.deepcopy(optimizer.state_dict()),
                 'train_loss': train_losses[-1],
             }
-            thread = threading.Thread(target=save_ckpt, args=(ckpt, cfg.summary_path, is_best))
-            thread.start()
+            ckpt_thread = threading.Thread(target=save_ckpt, args=(ckpt, cfg.summary_path, is_best))
+            ckpt_thread.start()
             best_loss = (epoch_loss / l) if is_best else best_loss
 
         if epoch % cfg.test_every == 0:
@@ -280,6 +282,9 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
             test_alpha.append(test_alpha_clamp)
             test_alignment.append(test_epoch_alignment)
             logger.info("saving model")
+
+        if ckpt_thread is not None:
+            ckpt_thread.join()
 
     return (train_losses, test_losses, test_dist, test_acc, test_precision, test_recall, test_f1, test_auc,
             train_acc, train_recall, train_precision, train_f1, train_auc, train_dist, train_seq_loss,

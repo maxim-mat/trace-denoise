@@ -41,6 +41,8 @@ def resolve_process_discovery_method(method_name: str) -> Callable:
             return pm4py.discover_petri_net_inductive
         case "dfg":
             return pm4py.discover_dfg
+        case "alpha":
+            return pm4py.discover_petri_net_alpha
         case _:
             raise AttributeError(f"Unsupported discovery method: {method_name}")
 

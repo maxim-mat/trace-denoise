@@ -43,7 +43,7 @@ def add_features_to_graph(graph: nx.Graph, feature_collections: Iterable[Iterabl
 
 def prepare_process_model_for_gnn(process_model: pm4py.PetriNet, init_marking: pm4py.Marking,
                                   final_marking: pm4py.Marking, cfg: Config, activity_counts=None) -> torch_geometric.data.Data:
-    if cfg.process_discovery_method == 'inductive':
+    if cfg.process_discovery_method in {'inductive', 'alpha'}:
         model_nx = pm4py.convert_petri_net_to_networkx(process_model, init_marking, final_marking)
     else:
         model_nx = dfg_filtering.generate_nx_graph_from_dfg(process_model, init_marking, final_marking, activity_counts)[0]

@@ -76,7 +76,7 @@ class Diffusion:
         model.train()
         return x
 
-    def sample_with_matrix(self, model, n, num_categories, sequence_length, transition_dim, transition_matrix, 
+    def sample_with_matrix(self, model, n, num_categories, sequence_length, transition_dim, transition_matrix,
                            x_ref=None, y=None, denoiser_output='noise'):
         model.eval()
         with torch.no_grad():
@@ -94,13 +94,14 @@ class Diffusion:
                     noise = torch.randn_like(x)
                 else:
                     noise = torch.zeros_like(x)
+                posterior_variance = ((1 - alpha_hat_prev) / (1 - alpha_hat)) * beta
                 if denoiser_output == 'noise':
-                    x = 1 / torch.sqrt(alpha) * (x - ((1 - alpha) / (torch.sqrt(1 - alpha_hat))) * predicted)
-                    + ((1 - alpha_hat_prev) / (1 - alpha_hat)) * torch.sqrt(beta) * noise
+                    x = (1 / torch.sqrt(alpha)) * (x - ((1 - alpha) / (torch.sqrt(1 - alpha_hat))) * predicted) \
+                        + torch.sqrt(posterior_variance) * noise
                 elif denoiser_output == 'original':
-                    x = (torch.sqrt(alpha_hat_prev) / (1 - alpha_hat)) * predicted
-                    + ((torch.sqrt(alpha) * (1 - alpha_hat_prev)) / (1 - alpha_hat)) * x
-                    + ((1 - alpha_hat_prev) / (1 - alpha_hat)) * torch.sqrt(beta) * noise
+                    x = (torch.sqrt(alpha_hat_prev) * beta / (1 - alpha_hat)) * predicted \
+                        + ((torch.sqrt(alpha) * (1 - alpha_hat_prev)) / (1 - alpha_hat)) * x \
+                        + torch.sqrt(posterior_variance) * noise
                     m = matrix_hat
         model.train()
         loss = loss.item() if loss is not None else None

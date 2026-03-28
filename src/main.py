@@ -11,6 +11,7 @@ import torch.nn as nn
 from scipy.stats import wasserstein_distance
 from sklearn.metrics import roc_auc_score, accuracy_score, precision_score, recall_score, f1_score
 from sklearn.model_selection import train_test_split
+from sympy import false
 from tensorboardX import SummaryWriter
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
@@ -168,9 +169,9 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
         epoch_second_loss = 0.0
         for i, (x, y) in enumerate(train_loader):
             optimizer.zero_grad()
-            x = x.permute(0, 2, 1).to(cfg.device).float()
-            y = y.permute(0, 2, 1).to(cfg.device).float()
-            t = diffuser.sample_timesteps(x.shape[0]).to(cfg.device)
+            x = x.permute(0, 2, 1).to(cfg.device, non_blocking=True).float()
+            y = y.permute(0, 2, 1).to(cfg.device, non_blocking=True).float()
+            t = diffuser.sample_timesteps(x.shape[0]).to(cfg.device, non_blocking=True)
             drop_matrix = False
             x_t, eps = diffuser.noise_data(x, t)  # each item in batch gets different level of noise based on timestep
             if np.random.random() < cfg.conditional_dropout:
@@ -206,7 +207,7 @@ def train(diffuser, denoiser, optimizer, train_loader, test_loader, transition_m
             ckpt_thread.start()
             best_loss = (epoch_loss / l) if is_best else best_loss
 
-        if epoch % cfg.test_every == 0:
+        if epoch % cfg.test_every == 0 and false:
             logger.info("testing epoch")
             if cfg.eval_train:
                 denoiser.eval()
@@ -329,12 +330,13 @@ def main():
         train_dataset,
         batch_size=cfg.batch_size,
         shuffle=True,
-        num_workers=cfg.num_workers
+        num_workers=cfg.num_workers,
+        pin_memory=True,
     )
     test_loader = DataLoader(
         test_dataset,
         batch_size=cfg.batch_size,
-        shuffle=True,
+        shuffle=False,
         num_workers=cfg.num_workers
     )
 

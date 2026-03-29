@@ -47,7 +47,7 @@ def evaluate_dataset(denoiser, diffuser, rg_transition_matrix, loader, cfg):
     pad_token = cfg.num_classes - 1
     denoised = []
     gt = []
-    for x, y in loader:
+    for x, y in tqdm(loader):
         x = x.permute(0, 2, 1).to(cfg.device).float()
         y = y.permute(0, 2, 1).to(cfg.device).float()
         x_hat, matrix_hat, loss, seq_loss, mat_loss = \
@@ -385,6 +385,7 @@ def main():
               dk_process_model, dk_init_marking, dk_final_marking, cfg, summary, logger)
 
     denoiser.load_state_dict(torch.load(os.path.join(cfg.summary_path, 'best.ckpt'), map_location=cfg.device)['model_state'])
+    logger.info('beginning evaluation on test')
     accuracy, precision, recall = evaluate_dataset(denoiser, diffuser, rg_transition_matrix, test_loader, cfg)
 
     end_time = time.perf_counter()
